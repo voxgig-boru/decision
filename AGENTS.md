@@ -212,7 +212,8 @@ print (Decision.decide tree {age:40})   # => welcome
 > eval-table-first … got (Map, None)`), which blocks the run although the
 > code is correct. With a literal model call its own evaluator
 > (`Decision.eval-table` / `Decision.eval-tree`), or build the model with the
-> builders (`make-table` / `make-tree`) and `decide` works.
+> builders (`make-table` / `make-tree`) and `decide` works. Minimal repro:
+> `dx-report.md` → "Migration to boru main @ 64c5ab2", open defect F.
 
 Test one condition or one operator directly:
 

@@ -1,7 +1,7 @@
 {
   "name": "decision",
   "version": "0.1.0",
-  "aql_ref": "main",
+  "boru_ref": "main",
   "verified_ref": "64c5ab2",
   "description": "Declarative decision logic for boru: express business rules as data \u2014 a condition, a compound predicate, a decision table (rules with a hit policy), or a decision tree (branch/leaf nodes) \u2014 then evaluate them against an input Map. Exposed as the single `Decision` namespace.",
   "conventions": {
