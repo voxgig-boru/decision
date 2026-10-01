@@ -9,7 +9,7 @@ Declarative **decision logic**: express business rules as data — a
 **condition**, a compound **predicate**, a **decision table** (rules + hit
 policy), or a **decision tree** (branch/leaf nodes) — then evaluate against an
 input `Map`. Public surface = the `Decision` namespace. Everything below is
-verified against `boru @ 61856202` (pinned) and `boru @ 5aed3834` (latest main).
+verified against boru main @ `64c5ab2` (2026-10-01).
 
 ## Import
 
@@ -17,10 +17,16 @@ verified against `boru @ 61856202` (pinned) and `boru @ 5aed3834` (latest main).
 import "./decision.aql"
 ```
 
-- Path resolves relative to the **working directory the script runs from**,
-  not the importing file. Run scripts from where that relative path is valid.
-- Needs **boru ≥ `61856202`** (surface/exposes, generics, `refine Record`,
-  `fnsig`). It imports no `boru:*` dependencies.
+- A relative path resolves against the **importing file's own directory**
+  (for both `boru file` and `boru check file`), not the working directory —
+  a script in `test/` writes `import "../decision.aql"`.
+- Needs a current boru main (verified at `64c5ab2`; uses surface/exposes,
+  generics, `refine Record`, `fnsig`). It imports no `boru:*` dependencies.
+- boru main has **one execution path**: `boru file` runs a static pre-flight
+  check, then compiles to bytecode and runs on the VM — there is no
+  interpreter fallback, and `--compile`/`--force-compile`/`--no-compile` are
+  retired (usage errors). A check error or a `[boru/compile_failed]` blocks
+  the run.
 
 ## The one calling rule
 
@@ -46,9 +52,11 @@ backwards — prefer forward. What you must **not** do is put the receiver
 *first* in an all-forward call:
 
 ```boru
-(Decision.decide table {age:25})    # ✓ model, then input (receiver) last => a result
-(Decision.decide {age:25} table)    # ✗ receiver first: binds model:={age:25}
-                                     #   => {ok:false error:"unknown-model-kind"}
+import "./decision.aql"
+def table (Decision.make-table [(Decision.make-rule {field:"age" op:"gte" value:18} {category:"adult"})])
+print (Decision.decide table {age:25})    # ✓ model, then input (receiver) last => {category: adult}
+print (Decision.decide {age:25} table)    # ✗ receiver first: binds model:={age:25}
+                                          #   => {ok:false error:"unknown-model-kind"}
 ```
 
 That swap is **silent**. `model` and `input` are both `Map`, so nothing
@@ -119,9 +127,9 @@ def rules [
   (Decision.make-rule {field:"age" op:"gte" value:65} {category:"senior"})
 ]
 def table (Decision.make-table rules)
-(Decision.decide table {age:12}) print   # => {category: minor}
-(Decision.decide table {age:70}) print   # => {category: senior}
-(Decision.decide table {age:30}) print   # => {ok:false error:no-match}
+print (Decision.decide table {age:12})   # => {category: minor}
+print (Decision.decide table {age:70})   # => {category: senior}
+print (Decision.decide table {age:30})   # => {ok:false error:no-match}
 ```
 
 Collect every matching rule instead of just the first:
@@ -131,10 +139,11 @@ def tags (Decision.with-policy "collect" (Decision.make-table [
   (Decision.make-rule {field:"age"   op:"gte" value:18} {tag:"adult"})
   (Decision.make-rule {field:"score" op:"gte" value:50} {tag:"passing"})
 ]))
-(Decision.decide tags {age:25 score:80}) print   # => [{tag: adult}, {tag: passing}]
+print (Decision.decide tags {age:25 score:80})   # => [{tag: adult}, {tag: passing}]
 ```
 
-A decision **tree** (branch → leaf):
+A decision **tree** (branch → leaf), written as a Map literal and run with
+its own evaluator, `eval-tree`:
 
 ```boru
 def tree {kind:"tree" root:"root" nodes:[
@@ -145,8 +154,31 @@ def tree {kind:"tree" root:"root" nodes:[
   {id:"minor" kind:"leaf" result:"too-young"}
   {id:"adult" kind:"leaf" result:"welcome"}
 ]}
-(Decision.decide tree {age:40}) print   # => welcome
+print (Decision.eval-tree tree {age:40})   # => welcome
 ```
+
+The same tree built with the builders also runs through `decide`:
+
+```boru
+def tree (Decision.make-tree root/q [
+  (Decision.make-branch root/q [
+    {when:{field:"age" op:"lt"  value:18} next:"minor"}
+    {when:{field:"age" op:"gte" value:18} next:"adult"}
+  ])
+  (Decision.make-leaf minor/q "too-young")
+  (Decision.make-leaf adult/q "welcome")
+])
+print (Decision.decide tree {age:40})   # => welcome
+```
+
+> **`decide` + a Map-literal model trips a boru-check false positive (boru
+> main @ `64c5ab2`).** The pre-flight check analyses `decide`'s *other* arm
+> with the literal's concrete fields — a literal tree has no `rules`, a
+> literal table no `nodes` — and reports `no_signature` (e.g. `cannot call
+> eval-table-first … got (Map, None)`), which blocks the run although the
+> code is correct. With a literal model call its own evaluator
+> (`Decision.eval-table` / `Decision.eval-tree`), or build the model with the
+> builders (`make-table` / `make-tree`) and `decide` works.
 
 ## By-design notes (boru)
 
@@ -161,8 +193,9 @@ def tree {kind:"tree" root:"root" nodes:[
 - **Maps/Lists are immutable.** Builders return fresh values; there is no
   in-place edit. If you genuinely need a mutable Map, wrap it with `flex`
   (`def m (flex {a:1})` then `(m set "b" 2)` → `{a:1 b:2}`).
-- **Integer overflow is fail-loud, by design.** Integers are 63-bit; an
-  overflowing `add`/`mul` **raises** `integer_overflow` rather than wrapping.
+- **Integer overflow is fail-loud, by design.** Integers are signed 64-bit;
+  an overflowing `add`/`mul` **raises** `integer_overflow` rather than
+  wrapping.
 
 ## Common mistakes
 
@@ -176,10 +209,12 @@ def tree {kind:"tree" root:"root" nodes:[
 | treat a miss as an exception | inspect `result.error` (a hit has none) | A *non-match* returns `{ok:false error:"…"}` (no throw); a hit is your bare `then`/leaf value. |
 | an ordering op (`lt`/`gte`/…) on a maybe-missing field | gate presence first (`{…} field has`), or compare with `eq`/`neq` only | A missing field is `None`, not Comparable, so an ordering op **raises** `not_comparable`. (`is_*` can't gate this — not usable in conditions.) |
 | `make-branch "root" …` | `make-branch root/q …` | The builder's `id` is an **Atom**; quote bare names with `/q`. |
+| `Decision.decide {kind:"tree" …literal…} input` | `Decision.eval-tree tree input` (or build with `make-tree` and `decide`) | boru main's pre-flight check analyses `decide`'s other arm with the literal's missing field and reports a false `no_signature` that blocks the run. |
 
 A note on `print` while debugging: `print` collects a forward argument, so a
-chain like `(a) print (b) print` can reorder. Write `print (value) end` (or
-`(value) print end`), one value per statement.
+chain like `(a) print (b) print` can reorder (each `print` collects the next
+statement's value). Write `print (value)` — verb first, one value per
+statement — and output appears in source order.
 
 If the full repo is available, `AGENTS.md`, `api.json` (machine-readable
 signatures), and `docs/reference.md` have the complete guide;

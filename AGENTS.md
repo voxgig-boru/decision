@@ -1,8 +1,8 @@
 # AGENTS.md — using the `Decision` library
 
-Guidance for an AI coding agent calling this decision-logic library from an
-boru project. Every code block below is verified to run against
-`boru-lang/boru` @ `61856202` (the pinned build) and @ `5aed3834` (latest `main`). If you read nothing else, read
+Guidance for an AI coding agent calling this decision-logic library from a
+boru project. Every code block below was executed against `boru-lang/boru`
+main @ `64c5ab2` (2026-10-01). If you read nothing else, read
 [The one calling rule](#the-one-calling-rule) and
 [Common mistakes](#common-mistakes).
 
@@ -13,8 +13,15 @@ Declarative **decision logic**: express business rules as data — a
 hit policy), or a **decision tree** (branch/leaf nodes) — then evaluate them
 against an input `Map`. The public surface is the `Decision` namespace.
 
-This library needs **boru ≥ `61856202`** — it uses `surface`/`exposes`,
-generics, `refine Record`, and `fnsig`. It imports no `boru:*` dependencies.
+This library needs a current **boru main** (verified at `64c5ab2`) — it uses
+`surface`/`exposes`, generics, `refine Record`, and `fnsig`. It imports no
+`boru:*` dependencies.
+
+boru main has **one execution path**: `boru file` runs a static pre-flight
+check, then compiles the program to bytecode and runs it on the VM. There is
+no interpreter fallback, and `--compile` / `--force-compile` /
+`--no-compile` are retired (passing them is a usage error). A check error,
+or a `[boru/compile_failed] … this is a compiler defect`, blocks the run.
 
 > **Calling convention.** Forward args, receiver (the model/input) last:
 > `Decision.decide model input`. Piping the input in also works
@@ -28,9 +35,10 @@ generics, `refine Record`, and `fnsig`. It imports no `boru:*` dependencies.
 import "./decision.aql"
 ```
 
-- The path resolves **relative to the working directory the script is run
-  from**, not the importing file. Run scripts from the directory where that
-  relative path is valid.
+- A relative path resolves against the **importing file's own directory**
+  (for both `boru file` and `boru check file`), not the working directory.
+  A script next to `decision.aql` writes `import "./decision.aql"`; one in
+  `test/` writes `import "../decision.aql"`.
 
 ## The one calling rule
 
@@ -56,9 +64,11 @@ backwards — prefer forward. What you must **not** do is put the receiver
 *first* in an all-forward call:
 
 ```boru
-(Decision.decide table {age:25})    # ✓ model, then input (receiver) last => a result
-(Decision.decide {age:25} table)    # ✗ receiver first: binds model:={age:25}
-                                     #   => {ok:false error:"unknown-model-kind"}
+import "./decision.aql"
+def table (Decision.make-table [(Decision.make-rule {field:"age" op:"gte" value:18} {category:"adult"})])
+print (Decision.decide table {age:25})    # ✓ model, then input (receiver) last => {category: adult}
+print (Decision.decide {age:25} table)    # ✗ receiver first: binds model:={age:25}
+                                          #   => {ok:false error:"unknown-model-kind"}
 ```
 
 That swap is **silent**. `model` and `input` are both `Map`, so nothing
@@ -135,9 +145,9 @@ def rules [
   (Decision.make-rule {field:"age" op:"gte" value:65} {category:"senior"})
 ]
 def table (Decision.make-table rules)
-(Decision.decide table {age:12}) print   # => {category: minor}
-(Decision.decide table {age:70}) print   # => {category: senior}
-(Decision.decide table {age:30}) print   # => {ok:false error:no-match}
+print (Decision.decide table {age:12})   # => {category: minor}
+print (Decision.decide table {age:70})   # => {category: senior}
+print (Decision.decide table {age:30})   # => {ok:false error:no-match}
 ```
 
 A compound condition inside a rule (`all-of` / `any-of` / `not-of`):
@@ -150,8 +160,8 @@ def rule (Decision.make-rule
   ]}
   {tier:"premium"})
 def tbl (Decision.make-table [rule])
-(Decision.decide tbl {age:25 score:95}) print   # => {tier: premium}
-(Decision.decide tbl {age:25 score:50}) print   # => {ok:false error:no-match}
+print (Decision.decide tbl {age:25 score:95})   # => {tier: premium}
+print (Decision.decide tbl {age:25 score:50})   # => {ok:false error:no-match}
 ```
 
 Collect every matching rule instead of just the first:
@@ -161,10 +171,11 @@ def tags (Decision.with-policy "collect" (Decision.make-table [
   (Decision.make-rule {field:"age"   op:"gte" value:18} {tag:"adult"})
   (Decision.make-rule {field:"score" op:"gte" value:50} {tag:"passing"})
 ]))
-(Decision.decide tags {age:25 score:80}) print   # => [{tag: adult}, {tag: passing}]
+print (Decision.decide tags {age:25 score:80})   # => [{tag: adult}, {tag: passing}]
 ```
 
-A decision **tree** (branch → leaf):
+A decision **tree** (branch → leaf), written as a Map literal and run with
+its own evaluator, `eval-tree`:
 
 ```boru
 def tree {kind:"tree" root:"root" nodes:[
@@ -175,14 +186,37 @@ def tree {kind:"tree" root:"root" nodes:[
   {id:"minor" kind:"leaf" result:"too-young"}
   {id:"adult" kind:"leaf" result:"welcome"}
 ]}
-(Decision.decide tree {age:40}) print   # => welcome
+print (Decision.eval-tree tree {age:40})   # => welcome
 ```
+
+The same tree built with the builders also runs through `decide`:
+
+```boru
+def tree (Decision.make-tree root/q [
+  (Decision.make-branch root/q [
+    {when:{field:"age" op:"lt"  value:18} next:"minor"}
+    {when:{field:"age" op:"gte" value:18} next:"adult"}
+  ])
+  (Decision.make-leaf minor/q "too-young")
+  (Decision.make-leaf adult/q "welcome")
+])
+print (Decision.decide tree {age:40})   # => welcome
+```
+
+> **`decide` + a Map-literal model trips a boru-check false positive (boru
+> main @ `64c5ab2`).** The pre-flight check analyses `decide`'s *other* arm
+> with the literal's concrete fields — a literal tree has no `rules`, a
+> literal table no `nodes` — and reports `no_signature` (e.g. `cannot call
+> eval-table-first … got (Map, None)`), which blocks the run although the
+> code is correct. With a literal model call its own evaluator
+> (`Decision.eval-table` / `Decision.eval-tree`), or build the model with the
+> builders (`make-table` / `make-tree`) and `decide` works.
 
 Test one condition or one operator directly:
 
 ```boru
-(Decision.eval-cond {field:"age" op:"gte" value:18} {age:25}) print   # => true
-(Decision.apply-op 18 "gte" 25) print                                  # => true  (lhs 25 gte rhs 18)
+print (Decision.eval-cond {field:"age" op:"gte" value:18} {age:25})   # => true
+print (Decision.apply-op 18 "gte" 25)                                  # => true  (lhs 25 gte rhs 18)
 ```
 
 ## Common mistakes
@@ -197,10 +231,12 @@ Test one condition or one operator directly:
 | treat a miss as an exception | inspect `result.error` (a hit has none) | A *non-match* returns `{ok:false error:"…"}` (no throw); a hit is your bare `then`/leaf value, with no `ok`/`error` fields. |
 | an ordering op (`lt`/`gte`/…) on a maybe-missing field | guarantee the field is present, or compare it only with `eq`/`neq` | A missing field is `None`, not Comparable, so an ordering op **raises** `not_comparable`. (`eq`/`neq` return false for a missing field; the unary `is_*` ops can't gate this — they aren't usable in conditions.) |
 | `make-branch "root" …` | `make-branch root/q …` | The builder's `id` is an **Atom**; quote bare names with `/q`. |
+| `Decision.decide {kind:"tree" …literal…} input` | `Decision.eval-tree tree input` (or build with `make-tree` and `decide`) | boru main's pre-flight check analyses `decide`'s other arm with the literal's missing field and reports a false `no_signature` that blocks the run. |
 
 A note on `print` while debugging: `print` collects a forward argument, so a
-chain like `(a) print (b) print` can reorder. Write `print (value) end` (or
-`(value) print end`), one value per statement.
+chain like `(a) print (b) print` can reorder (each `print` collects the next
+statement's value). Write `print (value)` — verb first, one value per
+statement — and output appears in source order.
 
 ## Where to look next
 
@@ -209,4 +245,5 @@ chain like `(a) print (b) print` can reorder. Write `print (value) end` (or
   order, return types).
 - `docs/how-to.md` — task recipes (tables, trees, hit policies, testing).
 - `test/decision_smoke_test.aql` — a complete, runnable worked example.
-- `dx-report.md` — boru-runtime notes observed building this library.
+- `dx-report.md` — boru-runtime notes observed building this library, including
+  the migration to boru main @ `64c5ab2` and its open upstream defects.

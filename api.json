@@ -2,19 +2,22 @@
   "name": "decision",
   "version": "0.1.0",
   "aql_ref": "main",
-  "description": "Declarative decision logic for AQL: express business rules as data \u2014 a condition, a compound predicate, a decision table (rules with a hit policy), or a decision tree (branch/leaf nodes) \u2014 then evaluate them against an input Map. Exposed as the single `Decision` namespace.",
+  "verified_ref": "64c5ab2",
+  "description": "Declarative decision logic for boru: express business rules as data \u2014 a condition, a compound predicate, a decision table (rules with a hit policy), or a decision tree (branch/leaf nodes) \u2014 then evaluate them against an input Map. Exposed as the single `Decision` namespace.",
   "conventions": {
-    "import": "import \"./decision.aql\"  \u2014 binds the `Decision` namespace. Imports no aql:* dependencies; callers need nothing else.",
-    "call": "forward form, verb first, then its arguments: `Decision.verb arg1 arg2`. Wrap a call in parens, or end it, when a bare value would otherwise follow the verb and get swallowed: `(Decision.decide table {age:25})`.",
-    "evaluator_arg_order": "evaluators take the MODEL first, the input second: `Decision.eval-table table input`, `Decision.decide model input`, `Decision.eval-cond cond input`. (In stack form the model sits on TOP of the input: `input table Decision.eval-table`.) apply-op is `Decision.apply-op rhs op lhs` and computes `lhs op rhs`.",
+    "import": "import \"./decision.aql\"  \u2014 binds the `Decision` namespace. Imports no boru:* dependencies; callers need nothing else.",
+    "call": "forward form, verb first, then its arguments, receiver (model/input) LAST: `Decision.verb arg1 arg2`. Piping the receiver in from the left (`input Decision.decide model`) also binds; receiver-first all-forward misbinds silently. Wrap a call in parens when its result is used as a value: `(Decision.decide table {age:25})`.",
+    "evaluator_arg_order": "evaluators take the MODEL first, the input (receiver) last: `Decision.eval-table table input`, `Decision.decide model input`, `Decision.eval-cond cond input`. (In stack form the model sits on TOP of the input: `input table Decision.eval-table`.) apply-op is `Decision.apply-op rhs op lhs` and computes `lhs op rhs`.",
     "construct": "Records are plain `refine Record` values \u2014 build them with a builder OR write them as Map literals; the evaluators only read fields. Node ids (make-branch/make-leaf/make-tree) are Atoms \u2014 quote bare names with /q (e.g. root/q).",
     "ops": "binary Comparable ops (used in conditions and apply-op): eq, neq, lt, lte, gt, gte. Unary ops: is_true, is_false, is_null, is_not_null \u2014 reachable ONLY via the direct two-arg `Decision.apply-op rhs op`, NOT inside a condition/table/tree (eval-cond always supplies a value, so a unary op there raises).",
     "hit_policies": "for tables: \"first\" (default \u2014 first matching rule's then), \"unique\" (the single match; multiple-matches/no-match errors), \"collect\" (a List of every matching rule's then), \"priority\" (the matching rule with the highest `priority` field, default 0).",
     "error_results_not_exceptions": "evaluators never throw on a miss; they return a Map {ok:false error:...} with error one of: \"no-match\", \"multiple-matches\", \"unknown-model-kind\", \"no-branch-match\", \"node-not-found\", \"unknown-node-kind\", \"max-depth-exceeded\". A hit is your bare then/leaf value (no ok/error fields); inspect result.error to tell a miss from a hit.",
     "missing_field_gotcha": "an ordering op (lt/lte/gt/gte) on a MISSING field RAISES `not_comparable` \u2014 a missing field is None, not Comparable, so the op raises rather than returning false. eq/neq return false for a missing field; guarantee the field is present, or compare it only with eq/neq. The unary is_* ops cannot gate this \u2014 they are not usable inside conditions.",
-    "import_resolution": "relative to the working directory the script is run from, not the importing file",
+    "import_resolution": "relative to the IMPORTING FILE's own directory (for both `boru file` and `boru check file`), not the working directory \u2014 a script in test/ writes `import \"../decision.aql\"`.",
     "external_deps": [],
-    "requires": "needs aql >= 61856202 \u2014 uses surface/exposes, generics, refine Record, and fnsig. No aql:* deps."
+    "requires": "needs a current boru main (verified at 64c5ab2, 2026-10-01) \u2014 uses surface/exposes, generics, refine Record, and fnsig. No boru:* deps.",
+    "execution": "boru main has one execution path: `boru file` runs a static pre-flight check, then compiles to bytecode and runs on the VM (no interpreter fallback; --compile/--force-compile/--no-compile are retired). All five suites compile and pass on 64c5ab2.",
+    "decide_literal_model_check_fp": "known boru-check false positive on boru main @ 64c5ab2: `Decision.decide` given a Map-LITERAL model is rejected by the pre-flight check (it analyses decide's other arm with the literal's missing rules/nodes field and reports no_signature), blocking the run although the code is correct. Build the model with make-table/make-tree, or call eval-table/eval-tree directly with a literal."
   },
   "modules": {
     "decision.aql": {

@@ -1,5 +1,37 @@
 # Decision library — performance baseline
 
+## Current baseline — boru main @ `64c5ab2` (2026-10-01), single execution path
+
+boru main no longer has an interpreter mode: since 2026-09-19 every program
+compiles to bytecode and runs on the VM (or fails with
+`[boru/compile_failed]`), and `-no-compile` / `--force-compile` are retired.
+`bench/bench.sh` therefore measures the one path and checks the checksum
+against an independently computed value instead of diffing two modes.
+
+```bash
+BORU=/path/to/boru bash bench/bench.sh          # default: iters=3000 runs=3
+BORU=/path/to/boru ITERS=5000 RUNS=5 bash bench/bench.sh
+```
+
+Measured in this environment, `iters=3000`, best-of-3:
+
+| metric | compiled (the only path) |
+|---|---|
+| total wall (s) | 1.98 |
+| fixed overhead — pre-flight check + compile (s) | 0.84 |
+| per-iteration execution (µs) | 378 |
+| checksum | `1184` (expected `1184`) |
+
+Against the `203ea2f` compiled column below, per-iteration execution is in
+the same range (323 → 378 µs) while the fixed parse + check + compile
+overhead grew (0.28 → 0.84 s); absolute seconds are environment-specific, so
+compare like with like. The workload needed one
+compile-defect workaround (`bench/decision_bench.aql`, "dynamic-scope def
+`acc` of unpromoted computed value"). The sections below are the historical
+two-mode baseline, kept as the record.
+
+---
+
 The `Decision` library now runs **fully bytecode-compiled** — every one of the
 five test suites (`decision_{unit,prop}_{test,spec}` + `decision_smoke_test`)
 compiles under strict `boru --force-compile` with output byte-identical to the

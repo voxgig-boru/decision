@@ -17,11 +17,12 @@ types and the `Comparable` surface. Import it with:
 import "./decision.aql"
 ```
 
-The path resolves **relative to the working directory the script is run
-from**, not the importing file — run scripts from the directory where
-`./decision.aql` is valid. The library imports no `boru:*` dependencies,
-so a consumer needs nothing else; it does require **boru ≥ `61856202`**
-(it uses `surface`/`exposes`, generics, `refine Record`, and `fnsig`).
+A relative path resolves against the **importing file's own directory**
+(for both `boru file` and `boru check file`), not the working directory —
+a script in `test/` writes `import "../decision.aql"`. The library imports
+no `boru:*` dependencies, so a consumer needs nothing else; it needs a
+current boru `main` (verified at `64c5ab2`; it uses `surface`/`exposes`,
+generics, `refine Record`, and `fnsig`).
 
 ---
 
@@ -46,8 +47,9 @@ Two ordering facts:
 **Wrap a call in parens, or end it,** when a bare value would otherwise
 follow the verb and get swallowed: `(Decision.decide table {age:25})`.
 A note on `print` while debugging: `print` collects a forward argument,
-so write one value per statement — `print (value) end` or
-`(value) print end`.
+so a chain like `(a) print (b) print` reorders (each `print` collects the
+next statement's value). Write one value per statement in the forward
+form — `print (value)` — and output appears in source order.
 
 Records are plain `refine Record` values: build them with a builder
 **or** write them as Map literals; the evaluators only read fields.
@@ -124,8 +126,8 @@ require. It is exposed by the scalar builtins `Integer`, `Float`,
 `Comparable` itself. It is a membership test, not a record:
 
 ```boru
-(5 is Decision.Comparable) print     # => true   (a scalar is Comparable)
-({a:1} is Decision.Comparable) print # => false  (a map has no cmp contract)
+print (5 is Decision.Comparable)     # => true   (a scalar is Comparable)
+print ({a:1} is Decision.Comparable) # => false  (a map has no cmp contract)
 ```
 
 ---
@@ -147,7 +149,7 @@ Construct a single condition.
 | **Returns** | `Cond` |
 
 ```boru
-(Decision.cond age/q "gte" 18) print
+print (Decision.cond age/q "gte" 18)
 # => {field: age, op: gte, value: 18}
 ```
 
@@ -162,7 +164,7 @@ Build an *every-child-must-hold* predicate.
 | **Returns** | `Pred` (`kind:"group" op:"all"`) |
 
 ```boru
-(Decision.all-of [{field:"age" op:"gte" value:18} {field:"score" op:"gt" value:50}]) print
+print (Decision.all-of [{field:"age" op:"gte" value:18} {field:"score" op:"gt" value:50}])
 # => {kind: group, op: all, children: [{field: age, op: gte, value: 18}, {field: score, op: gt, value: 50}]}
 ```
 
@@ -187,7 +189,7 @@ Negate a single condition.
 | **Returns** | `Pred` (`kind:"group" op:"not"`) |
 
 ```boru
-(Decision.not-of {field:"age" op:"lt" value:18}) print
+print (Decision.not-of {field:"age" op:"lt" value:18})
 # => {kind: group, op: not, children: {field: age, op: lt, value: 18}}
 ```
 
@@ -202,7 +204,7 @@ Pair a `when` condition/predicate with a `then` result.
 | **Returns** | `Rule` |
 
 ```boru
-(Decision.make-rule {field:"age" op:"gte" value:18} {category:"adult"}) print
+print (Decision.make-rule {field:"age" op:"gte" value:18} {category:"adult"})
 # => {when: {field: age, op: gte, value: 18}, then: {category: adult}}
 ```
 
@@ -219,8 +221,8 @@ Assemble a list of rules into a table.
 | **Returns** | `DTable` (hit policy defaults to `"first"`) |
 
 ```boru
-(Decision.make-table [{when:{field:"age" op:"lt" value:18} then:{category:"minor"}}]) print
-# => {kind: table, rules: [{then: {category: minor}, when: {field: age, op: lt, value: 18}}], hit-policy: first}
+print (Decision.make-table [{when:{field:"age" op:"lt" value:18} then:{category:"minor"}}])
+# => {kind: table, rules: [{when: {field: age, op: lt, value: 18}, then: {category: minor}}], hit-policy: first}
 ```
 
 ### `Decision.with-policy`
@@ -235,8 +237,8 @@ Copy a table with a new hit policy.
 
 ```boru
 def t (Decision.make-table [{when:{field:"x" op:"gt" value:0} then:{s:"pos"}}])
-(Decision.with-policy "unique" t) print
-# => {kind: table, rules: [{then: {s: pos}, when: {field: x, op: gt, value: 0}}], hit-policy: unique}
+print (Decision.with-policy "unique" t)
+# => {kind: table, rules: [{when: {field: x, op: gt, value: 0}, then: {s: pos}}], hit-policy: unique}
 ```
 
 ### `Decision.make-branch`
@@ -250,8 +252,8 @@ Build an interior tree node.
 | **Returns** | `BranchNode` (`kind:"branch"`) |
 
 ```boru
-(Decision.make-branch root/q [{when:{field:"age" op:"gte" value:18} next:"adult"}]) print
-# => {id: root, kind: branch, branches: [{next: adult, when: {field: age, op: gte, value: 18}}]}
+print (Decision.make-branch root/q [{when:{field:"age" op:"gte" value:18} next:"adult"}])
+# => {id: root, kind: branch, branches: [{when: {field: age, op: gte, value: 18}, next: adult}]}
 ```
 
 ### `Decision.make-leaf`
@@ -265,7 +267,7 @@ Build a terminal tree node.
 | **Returns** | `LeafNode` (`kind:"leaf"`) |
 
 ```boru
-(Decision.make-leaf adult/q {category:"adult"}) print
+print (Decision.make-leaf adult/q {category:"adult"})
 # => {id: adult, kind: leaf, result: {category: adult}}
 ```
 
@@ -280,7 +282,7 @@ Assemble a root id and node list into a tree.
 | **Returns** | `DTree` (`kind:"tree"`) |
 
 ```boru
-(Decision.make-tree root/q [{id:"root" kind:"leaf" result:"x"}]) print
+print (Decision.make-tree root/q [{id:"root" kind:"leaf" result:"x"}])
 # => {kind: tree, root: root, nodes: [{id: root, kind: leaf, result: x}]}
 ```
 
@@ -301,10 +303,10 @@ The binary form is generic over `Comparable`: the ordering ops
 unary ops (`is_true`/`is_false`/`is_null`/`is_not_null`).
 
 ```boru
-(Decision.apply-op 18 "gte" 25) print   # => true   (lhs 25 gte rhs 18)
-(Decision.apply-op 25 "gte" 18) print   # => false  (lhs 18 gte rhs 25)
-(Decision.apply-op "a" "lt" "b") print  # => false  (Strings Comparable: lhs 'b' lt rhs 'a')
-(Decision.apply-op 5 "is_not_null") print # => true (unary, 2-arg form)
+print (Decision.apply-op 18 "gte" 25)   # => true   (lhs 25 gte rhs 18)
+print (Decision.apply-op 25 "gte" 18)   # => false  (lhs 18 gte rhs 25)
+print (Decision.apply-op "a" "lt" "b")  # => false  (Strings Comparable: lhs 'b' lt rhs 'a')
+print (Decision.apply-op 5 "is_not_null") # => true (unary, 2-arg form)
 ```
 
 An ordering op on a non-Comparable operand raises (see
@@ -322,8 +324,8 @@ applies `cond.op` against `cond.value`.
 | **Returns** | `Boolean` |
 
 ```boru
-(Decision.eval-cond {field:"age" op:"gte" value:18} {age:25}) print  # => true
-(Decision.eval-cond {field:"age" op:"gte" value:18} {age:15}) print  # => false
+print (Decision.eval-cond {field:"age" op:"gte" value:18} {age:25})  # => true
+print (Decision.eval-cond {field:"age" op:"gte" value:18} {age:15})  # => false
 ```
 
 `eval-cond` always supplies three operands to `apply-op` (`rhs`, `op`,
@@ -344,7 +346,7 @@ condition).
 
 ```boru
 def p (Decision.all-of [{field:"age" op:"gte" value:18} {field:"score" op:"gt" value:50}])
-(Decision.eval-pred p {age:25 score:80}) print   # => true
+print (Decision.eval-pred p {age:25 score:80})   # => true
 ```
 
 ### `Decision.eval-table`
@@ -362,7 +364,7 @@ def tbl (Decision.make-table [
   {when:{field:"age" op:"lt"  value:18} then:{category:"minor"}}
   {when:{field:"age" op:"gte" value:18} then:{category:"adult"}}
 ])
-(Decision.eval-table tbl {age:25}) print   # => {category: adult}
+print (Decision.eval-table tbl {age:25})   # => {category: adult}
 ```
 
 Pass the **table** (`make-table rules`), not the raw rules list. The
@@ -388,7 +390,7 @@ def tree {kind:"tree" root:"root" nodes:[
   {id:"minor" kind:"leaf" result:"too-young"}
   {id:"adult" kind:"leaf" result:"welcome"}
 ]}
-(Decision.eval-tree tree {age:25}) print   # => welcome
+print (Decision.eval-tree tree {age:25})   # => welcome
 ```
 
 The walk is capped at 100 hops (see [Complexity](#complexity)); a branch
@@ -406,11 +408,20 @@ Dispatch on `model.kind` — `"table"` runs `eval-table`, `"tree"` runs
 | **Returns** | as `eval-table` / `eval-tree` — or `{ok:false error:"unknown-model-kind"}` |
 
 ```boru
-def model {kind:"table" hit-policy:"first" rules:[
-  {when:{field:"x" op:"gt" value:0} then:{sign:"positive"}}
-]}
-(Decision.decide model {x:5}) print   # => {sign: positive}
+def model (Decision.make-table [
+  (Decision.make-rule {field:"x" op:"gt" value:0} {sign:"positive"})
+])
+print (Decision.decide model {x:5})   # => {sign: positive}
 ```
+
+> **Known boru-check false positive (boru main @ `64c5ab2`).** Passed a
+> **Map-literal** model (`def model {kind:"table" …}`), `decide` is
+> rejected by the pre-flight check: the checker analyses `decide`'s other
+> arm with the literal's concrete fields — a literal table has no `nodes`
+> — and reports `no_signature` (`cannot call find-node … got (None,
+> None)`), which blocks the run although the code is correct. Build the
+> model with the builders (as above), or call the kind's own evaluator
+> (`Decision.eval-table` / `Decision.eval-tree`), which accept literals.
 
 ---
 
@@ -452,7 +463,7 @@ def tags (Decision.with-policy "collect" (Decision.make-table [
   (Decision.make-rule {field:"age"   op:"gte" value:18} {tag:"adult"})
   (Decision.make-rule {field:"score" op:"gte" value:50} {tag:"passing"})
 ]))
-(Decision.decide tags {age:25 score:80}) print   # => [{tag: adult}, {tag: passing}]
+print (Decision.decide tags {age:25 score:80})   # => [{tag: adult}, {tag: passing}]
 ```
 
 ---
@@ -473,8 +484,8 @@ catchable error on a bad operand or op.
 | a `next` id (or `root`) that names no node | returns `{ok:false error:"node-not-found"}` |
 | a tree node whose `kind` is neither `"branch"` nor `"leaf"` | returns `{ok:false error:"unknown-node-kind"}` |
 | a tree walk exceeding 100 hops (a cycle) | returns `{ok:false error:"max-depth-exceeded"}` |
-| an **ordering op** (`lt`/`lte`/`gt`/`gte`) on a non-Comparable operand — a Map/List, or a **missing field** (`None`) | **raises** `[aql/not_comparable]` |
-| `apply-op` with an unrecognised op String | **raises** `[aql/unknown_op]` |
+| an **ordering op** (`lt`/`lte`/`gt`/`gte`) on a non-Comparable operand — a Map/List, or a **missing field** (`None`) | **raises** `[boru/not_comparable]` |
+| `apply-op` with an unrecognised op String | **raises** `[boru/unknown_op]` |
 
 A missing input field reads as `None`, which is not Comparable — so an
 ordering op on a maybe-missing field raises `not_comparable` rather than

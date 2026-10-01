@@ -1,5 +1,9 @@
 # Developer-experience report: porting `boru:decision` — notes for improving boru
 
+> **Latest: [Migration to boru main @ 64c5ab2 (2026-10-01)](#migration-to-boru-main--64c5ab2-2026-10-01)**
+> — all five suites fully compile and pass on the single execution path;
+> three compile-defect workarounds, six open upstream defects with repros.
+
 **Date:** 2026-06-11
 **Builds under test:** `boru-lang/boru` @ `958c379b` (the `main` this library
 originally targeted) and `db828ec` (the older ref the sibling bloom-filter/trie
@@ -21,6 +25,121 @@ the commands and output are quoted verbatim.
 > [the bump checklist](#re-review-status-on-latest-main-7193a7d3)). Verified
 > evidence per finding:
 > [Re-review: status on latest main](#re-review-status-on-latest-main-7193a7d3).
+
+## Migration to boru main @ 64c5ab2 (2026-10-01)
+
+**Build under test:** `boru-lang/boru` main @ `64c5ab2` (2026-09-30), 1,587
+commits past the `6185620` this library was last verified on. **Result: all
+five suites fully compile, run and print `all green` (smoke: clean exit), and
+`boru check` reports 0 errors / 0 warnings on every suite and on
+`decision.aql`.** Three compile defects needed a natural, semantics-preserving
+rewrite (each carries a comment naming the defect); every assertion and
+expected value is unchanged. Every code example in `AGENTS.md`, the skill,
+`README.md` and `docs/` was executed against this build and fixed where it no
+longer behaved as documented.
+
+### Breaking changes hit
+
+| Change | Upstream | What it took here |
+|---|---|---|
+| **One execution path.** Every program compiles to bytecode and runs on the VM, or fails `[boru/compile_failed] … this is a compiler defect`; no interpreter fallback; `--compile` / `--force-compile` / `--no-compile` (and the `BORU_*COMPILE` env vars) retired — a usage error. `boru file` also runs the static check as a pre-flight; a check error blocks the run. | 2026-09-19 | `test/diverge.sh` rewritten: gate = every suite exits 0 under `boru <suite>` (and prints `all green` where it asserts) **and** `boru check` reports 0 errors on every suite and module. The interpreter/bytecode columns and the divergence diff are gone (there is nothing left to diverge from). `bench/bench.sh` rewritten to one mode with an independently computed checksum. |
+| **`/r` → `/v`** (the word `ref` → `valof`). | ADR-011, 2026-08-19 | The 16 `export` entries in `decision.aql` (`cond/v`, …). |
+| **Relative imports resolve against the importing file's directory** (run *and* check). | — | Suites and the bench `import "../decision.aql"`; the bench materialises its work copies next to the source. Every doc that said "relative to the working directory" corrected. |
+| `aql:` module prefix gone (`boru:`), CLI binary is `boru`. | — | Nothing in code (no `boru:*` deps; the suites already used `boru:test`); doc/hook wording. |
+| `print` still forward-collects (finding 5, by design). | — | The suites' stack-form summary `"---" print "fail count: " print Test.fail-count end print 0 Test.fail-count end Assert.equal end` let each `print` take the *next* statement's value; `"---"` was stranded and the final `Assert.equal` compared `Test.fail-count` against it — it passed only through the `Assert.equal` coercion defect below (and correctly failed when the count was non-zero). Rewritten as one forward `print (value)` per statement plus `Assert.equal 0 (Test.fail-count)`. Doc examples in the stack form `(x) print` printed out of order (e.g. `docs/reference.md` showed `false true` for `true false`) — all converted to `print (x)`. |
+| Map printing keeps insertion order. | — | Tutorial console output `{"error": …, "ok": false}` → `{"ok": false, "error": …}`. |
+| Integer is signed 64-bit (overflow still raises `integer_overflow`). | REFERENCE.md | Skill note said 63-bit; corrected. |
+
+### Workarounds applied (remove when fixed upstream)
+
+**1. `def x (do {map})` after a fn-local def — `decision.aql` (eval-tree and
+all the miss results).** The miss results were written `(do {ok: false,
+error: "…"})`. When a fn-local def precedes `def x (do {map})`, later
+loop-body reads of that local break when compiled: `eval-tree` declined to
+compile with *"fn eval-tree: a gradual read in a nested body has no seated
+guard: the interpreter dispatches it as a word when it holds a fn (NUR361)"*
+(it blocked `decision_unit_test` and `decision_smoke_test`), and the same
+shape without the rebinding is a **wrong runtime answer** —
+`undefined word`. A literal of literal values needs no `do`, so the misses
+are now plain Map literals.
+
+```boru
+# compile decline (NUR361)
+def fnode fn [[xs:List] [Any] [xs 0 get]]
+def tw fn [[xs:List] [Any] [def cur 0 def r (do {}) for 2 [def cur (xs fnode) print cur] end r]]
+print (tw [3])
+# expected: 3 3 {}   actual: [boru/compile_failed] … fn tw: a gradual read in a nested body has no seated guard … (NUR361)
+
+# runtime answer bug (same trigger, unrecorded)
+def tw fn [[n:Integer] [Any] [def cur (n add 2) def r (do {}) for 2 [print cur] end r]]
+print (tw 1)
+# expected: 3 3 {}   actual: [boru/undefined_word]: undefined word: cur   (boru check: 0 errors)
+# both: `def r {}` (no `do`) compiles and prints 3 3 {}
+```
+
+**2. `do {…}` with effectful list values in a property generator —
+`test/decision_prop_test.aql` (P2).**
+
+```boru
+import "boru:test"
+Test.check-prop "p" [do {a: [r.int 0 5], b: [r.int 0 5]}] [var [[pair] true]] 5 1 0
+# [boru/compile_failed] … fn storedfn$body: a call matched at run time takes a list or map
+# literal whose evaluation may have an effect … (NUR356)
+```
+
+Rewritten as `[{a: (r.int 0 5), b: (r.int 0 5)}]` — a map literal evaluates
+its paren values directly, giving the same generated map.
+
+**3. A loop-body def of a computed `if` over the same name —
+`bench/decision_bench.aql`.**
+
+```boru
+def acc 0
+for 3 [def acc (if (i 1 gt) [acc 1 add] [acc])] end
+print (acc)
+# expected: 1   actual: [boru/compile_failed] dynamic-scope def `acc` of unpromoted computed value
+```
+
+Rewritten as `if ok [def acc (acc 1 add)] []` (the "dynamic-scope def
+family" in boru's `design/COMPILABLE-SUBSET.md`).
+
+### Open upstream defects found
+
+| # | Kind | Defect | Record | Effect here |
+|---|---|---|---|---|
+| A | compile defect | `def x (do {map})` after a fn-local def → NUR361 decline in a later nested read | NUR361 (shape not listed) | worked around (1) |
+| B | runtime answer bug | same trigger → `undefined word` for the earlier local in a later loop body | unrecorded | worked around (1) |
+| C | compile defect | effectful `do {k: [..] …}` literal in a stored fn body | NUR356 | worked around (2) |
+| D | compile defect | dynamic-scope def of an unpromoted computed value | COMPILABLE-SUBSET "dynamic-scope def family" | worked around (3) |
+| E | runtime answer bug | **`Assert.equal` coerces a mismatched type to the expected type's zero value**: `Assert.equal 0 "A"`, `Assert.equal "" 5`, `Assert.equal false [1]` all *pass*. `assertEqualHandler` calls `core.ValuesEqual`, which assumes both sides share a type and reads the second through the first's accessor (`AsInteger("A")` → 0). Any `Assert.equal` whose computed side is `0`/`""`/`false` passes against a value of another type. | unrecorded | masked the broken suite summaries until they were fixed; the unit suite was re-verified with a structural `deq` check (all 35 assertions hold) |
+| F | checker false positive | **`boru check` analyses an imported fn's untaken `if` arm with the caller's concrete Map literal** and reports `no_signature` on the absent (None) field, which blocks the run. `Decision.decide` with a Map-literal model hits it (a literal tree has no `rules`: `cannot call eval-table-first … got (Map, None)`; a literal table has no `nodes`: `cannot call find-node … got (None, None)`). The same program in one file checks clean. The excerpt printed is the importing file's while the position is the imported module's. | unrecorded | none in the suites (`decide` runs on builder-made models, or inside `Test.test` bodies); docs now run literal models through `eval-tree`/`eval-table` and note the issue |
+
+Minimal standalone repro for F (two files):
+
+```boru
+# lib.boru
+def cnt fn [[xs:List] [Integer] [xs size]]
+def f fn [[m:Map] [Any] [if ((m get "kind") "list" eq) [(m get "xs") cnt] [0]]]
+export "L" {f: f/v}
+
+# main.boru
+import "./lib.boru"
+print (L.f {kind:"other"})
+# expected: 0   actual: check: 2:70: [error] no_signature: cannot call `cnt` … got (None); nearest [List]
+```
+
+### Original findings, re-checked on `64c5ab2`
+
+**1** still open (no tags at all now; `cmd/go/go.mod` still carries local
+`replace`s). **2** still partial: the swapped `Decision.with-policy t
+"collect"` is now an `uncalled_function` *check error* (it blocks the run —
+better), but with no swap hint, and the Map/Map swap `Decision.decide
+{age:25} table` still silently returns `unknown-model-kind`. **3, 4, 6, 8**
+remain fixed. **5** and **7**: behaviour unchanged by design; the proposed
+`check` lints are still absent (`"a" print "b" print` prints `b a`, and
+`{a:1} {a:1} eq` draws no warning).
+
+---
 
 This report comes out of porting the interpreter's internal `boru:decision`
 module into a standalone pure-boru library. The port itself went well — the

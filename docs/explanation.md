@@ -207,9 +207,11 @@ exception you must catch. The `collect` policy carries the same spirit:
 
 This library is a port of the interpreter's internal `boru:decision`
 module written **entirely in boru** — no Go, no native extensions. It
-imports no `boru:*` dependencies; it builds only on language features
-that landed by boru `61856202` (`surface`/`exposes`, generics,
-`refine Record`, and `fnsig`). The practical upshot is that the whole
+imports no `boru:*` dependencies; it builds only on core language
+features (`surface`/`exposes`, generics, `refine Record`, and `fnsig`;
+first available at boru `61856202`, now verified on boru main @
+`64c5ab2`, where every program — this library included — is compiled to
+bytecode and run on the VM). The practical upshot is that the whole
 module is readable, hackable, and portable boru you can vendor into a
 project with a single `import "./decision.aql"` — the behaviour is
 defined by the source you can see, not by a runtime you cannot. It is

@@ -6,7 +6,7 @@ For the *why* behind any of these, follow the links into the
 [Explanation](explanation.md); for exact signatures, the
 [Reference](reference.md).
 
-- [Install and run boru](#install-and-run-aql)
+- [Install and run boru](#install-and-run-boru)
 - [Choose between a table and a tree](#choose-between-a-table-and-a-tree)
 - [Build a table from rules](#build-a-table-from-rules)
 - [Use compound conditions](#use-compound-conditions)
@@ -15,21 +15,21 @@ For the *why* behind any of these, follow the links into the
 - [Handle a no-match or an error](#handle-a-no-match-or-an-error)
 - [Use it from your own script](#use-it-from-your-own-script)
 - [Run the tests](#run-the-tests)
+- [Run the test gate](#run-the-test-gate)
 
 ---
 
 ## Install and run boru
 
 The module is written in boru, which has no tagged release yet, so build
-the interpreter from source (the documented `go install …/aql@latest`
-fails on the repo's replace directives):
+`boru` from source at `main` (`go install …/cmd/go/boru@latest` fails on
+the repo's replace directives). This library tracks `main`; it was last
+verified at `64c5ab2` (2026-10-01):
 
 ```bash
-git clone https://github.com/boru-lang/boru /tmp/aql-source
-cd /tmp/aql-source
-git checkout 618562025d9e0154107306927911a8b1b046333c   # the commit CI pins (.github/workflows/test.yml BORU_REF)
-cd cmd/go
-GOFLAGS=-mod=mod go build -o "$HOME/.local/bin/boru" ./boru
+git clone https://github.com/boru-lang/boru /tmp/boru-source
+cd /tmp/boru-source/cmd/go     # (or fetch https://codeload.github.com/boru-lang/boru/tar.gz/main)
+GOWORK=off GOFLAGS=-mod=mod go build -o "$HOME/.local/bin/boru" ./boru
 ```
 
 Make sure `$HOME/.local/bin` is on your `PATH`, then check it:
@@ -38,18 +38,27 @@ Make sure `$HOME/.local/bin` is on your `PATH`, then check it:
 boru -version
 ```
 
-Run any script in this repo by passing its path. The relative
-`import "./decision.aql"` resolves against the working directory, so run
-from the repo root:
+Run any script in this repo by passing its path, from any directory. A
+relative import resolves against the **importing file's own directory**
+(for both `boru file` and `boru check file`), so the suites in `test/`
+write `import "../decision.aql"` and a script next to `decision.aql`
+writes `import "./decision.aql"`:
 
 ```bash
 boru test/decision_smoke_test.aql
 ```
 
-This module needs boru ≥ `61856202` — it uses `surface`/`exposes`,
+`boru file` first runs the static checker as a pre-flight (a check error
+blocks the run), then compiles the program to bytecode and runs it on the
+VM. There is one execution path: no interpreter fallback, and the old
+`--compile` / `--force-compile` / `--no-compile` flags are retired (a
+usage error). A `[boru/compile_failed] … this is a compiler defect` error
+is a boru bug, not a mistake in your script.
+
+This module needs a current boru `main` — it uses `surface`/`exposes`,
 generics, `refine Record`, and `fnsig`, and imports no `boru:*`
-dependencies. The CI workflow (`.github/workflows/test.yml`) pins the
-same commit.
+dependencies. The CI workflow (`.github/workflows/test.yml`) builds the
+current `main` HEAD.
 
 ---
 
@@ -270,10 +279,18 @@ def tree {kind:"tree" root:"check-age" nodes:[
   {id:"approve" kind:"leaf" result:"approved"}
   {id:"review"  kind:"leaf" result:"needs-review"}
 ]}
-print (Decision.decide tree {age:25 score:90}) end   # => approved
-print (Decision.decide tree {age:25 score:60}) end   # => needs-review
-print (Decision.decide tree {age:10 score:90}) end   # => rejected
+print (Decision.eval-tree tree {age:25 score:90}) end   # => approved
+print (Decision.eval-tree tree {age:25 score:60}) end   # => needs-review
+print (Decision.eval-tree tree {age:10 score:90}) end   # => rejected
 ```
+
+A Map-literal model is run with its own evaluator (`eval-tree` here,
+`eval-table` for a table). `Decision.decide` works on builder-made models
+(above), but on boru main @ `64c5ab2` `decide` over a **Map-literal**
+model trips a false positive in the pre-flight check: it analyses
+`decide`'s other arm with the literal's concrete fields (a literal tree
+has no `rules`) and reports `no_signature … got (Map, None)`, which blocks
+the run. See [`dx-report.md`](../dx-report.md).
 
 Note that ids inside Map-literal branches/leaves are Strings
 (`id:"reject"`, `next:"reject"`), while the builders take Atoms
@@ -386,8 +403,9 @@ from, and [AGENTS.md](../AGENTS.md) is the condensed calling guide.
 
 ## Run the tests
 
-Five suites ship with the module. Run them with `boru` from the repo root
-(so `import "./decision.aql"` resolves):
+Five suites ship with the module. Run them with `boru` (from any
+directory — each suite's `import "../decision.aql"` resolves against its
+own file):
 
 ```bash
 boru test/decision_unit_test.aql   # example-based unit tests — direct (boru:test)
@@ -414,71 +432,58 @@ runs it with `Test.run-property`, while `decision_prop_test.aql` calls
 the imperative `Test.check-prop` driver directly, passing
 `runs`/`seed`/`max-shrinks` explicitly.
 
-Each assertion-bearing suite ends by asserting `Test.fail-count` is `0`,
-so a failure makes `boru` exit non-zero — which is exactly what the
-[CI workflow](../.github/workflows/test.yml) checks on every push and
-pull request. The smoke suite carries no assertions; it passes by
-running clean (exit `0` with no error).
+Each assertion-bearing suite ends with `Assert.equal 0 (Test.fail-count)`
+and then prints `all green`, so a failure makes `boru` exit non-zero —
+which is exactly what the [CI workflow](../.github/workflows/test.yml)
+checks on every push and pull request. The smoke suite carries no
+assertions; it passes by running clean (exit `0` with no error).
 
-## Run the suites under every execution mode
+## Run the test gate
 
-boru can run a program three ways:
-
-- **interpreter** — `boru script.aql`: the default tree-walking engine.
-- **check** — `boru check script.aql`: the static type-checker (no
-  execution); it exits non-zero if it reports any error.
-- **bytecode** — `boru --force-compile script.aql`: compiles the program
-  to a flat strict-stack form and runs it on the kernel VM. It *aborts*
-  with a refusal reason when it can't lower a program faithfully (rather
-  than silently falling back to the interpreter, which plain `--compile`
-  does) — so a clean run is proof the VM actually executed the program.
+boru main has **one execution path**: `boru script.aql` runs the static
+checker as a pre-flight, compiles the program to bytecode and runs it on
+the VM — or fails with `[boru/compile_failed]`. There is no interpreter
+fallback, so "the suite runs" *means* "the suite fully compiles", and the
+retired `--compile` / `--force-compile` / `--no-compile` flags (and the
+old interpreter-vs-bytecode divergence check built on them) are gone. Two
+surfaces remain: **run** (`boru script.aql`) and **check**
+(`boru check script.aql`, the static checker on its own).
 
 `test/diverge.sh` is the gate, and it **tracks the latest `boru` from
 `main`** — boru is on an iterative-improvement track, so the gate targets
-the newest build rather than pinning a fixed one. It runs every suite
-under all three modes:
+the newest build rather than pinning a fixed one:
 
 ```bash
 bash test/diverge.sh
-# decision_unit_test.aql       interp ok  |  check ok      |  compile n/a (refused)
-# decision_unit_spec.aql       interp ok  |  check ok      |  compile n/a (refused)
-# decision_prop_test.aql       interp ok  |  check ok      |  compile ok (== interp)
-# decision_prop_spec.aql       interp ok  |  check ok      |  compile n/a (refused)
-# decision_smoke_test.aql      interp ok  |  check 16 err  |  compile n/a (refused)
-# status: 4/5 suites check-clean; 1/5 suites compile (divergence-checked); the rest are upstream-pending.
-# OK: interpreter passes every suite; no interpreter/bytecode divergence on any compiled suite
+# decision.aql                 check 0 err (module)
+# decision_unit_test.aql       run ok (compiled)  |  check ok (0 err)
+# decision_unit_spec.aql       run ok (compiled)  |  check ok (0 err)
+# decision_prop_test.aql       run ok (compiled)  |  check ok (0 err)
+# decision_prop_spec.aql       run ok (compiled)  |  check ok (0 err)
+# decision_smoke_test.aql      run ok (compiled)  |  check ok (0 err)
+# status: 5/5 suites run (fully compiled) and pass; 6/6 files check-clean (5 suites + 1 module).
+# OK: every suite compiles, runs and passes; every suite and module checks with 0 errors
 ```
 
-Three invariants are **hard** (a violation fails the gate):
+Every invariant is **hard** (a violation fails the gate):
 
-1. the interpreter passes every suite (the supported path);
-2. the checker (`boru check`) reports zero errors on every suite;
-3. every suite the compiler **accepts** produces output byte-identical to
-   the interpreter — the two engines never diverge.
+1. every suite runs: exit `0`, no `compile_failed`, and — for the
+   assertion-bearing suites — `all green` printed;
+2. `boru check` reports zero errors on every suite **and** on
+   `decision.aql`.
 
-The checker reached **zero false positives** on this library as of boru
-`main` `0b010ae` (every suite, and `decision.aql` itself, now check 0
-errors — see the upstream
-[`CLIENT-VERIFICATION-MAIN-2026-06-24.md`](https://github.com/boru-lang/boru/blob/main/design/CLIENT-VERIFICATION-MAIN-2026-06-24.md)),
-so `check` is now a real gate rather than advisory status — a regression
-on a newer `main` is a signal worth failing on.
+A `compile_failed` is labelled as such (it is a boru compiler defect, not
+a test failure) but still fails the gate. The library carries three
+natural workarounds for compiler defects found on `64c5ab2`, each with a
+comment naming the defect; [`dx-report.md`](../dx-report.md) has the
+minimal repros.
 
-The one thing reported as **current status** is *compile coverage*,
-because it moves as `boru` improves and is outside this repo's control:
-which suites the compiler accepts (the test-framework code-body words
-`test-test` / `each`, and the `smoke` suite's dynamic-help
-`check diagnostics` artifact, are still being lowered upstream). The
-compilable subset is **auto-detected**, so as more suites start compiling
-they are divergence-checked automatically — no edit needed.
-
-Resolving the build (latest `main` by default): the gate uses
-`$BYTECODE_AQL` if you point it at a binary, otherwise it builds
-`$BYTECODE_BORU_REF` (default: current `main` HEAD), caching by sha in
-`~/.local/bin`. The project's pinned `BORU_REF` (`61856202`) predates the
-bytecode compiler and is **only** the interpreter baseline — the gate's
-build is independent of it. Because the proxy git relay is scoped, the
-source is fetched as an HTTPS tarball from codeload; a new sha needs `go`
-+ network, after which it's cached. To pin a specific commit (e.g. for a
-reproducible CI run), pass `BYTECODE_BORU_REF=<sha>`. To wire the gate into
-CI, add a step that runs `bash test/diverge.sh` after the suites; note
-that editing `.github/workflows/` needs a token with `workflow` scope.
+Resolving the build (latest `main` by default): the gate uses `$BORU` if
+you point it at a binary, otherwise it builds `$BORU_REF` (default:
+current `main` HEAD) from its `cmd/go` module, caching by sha in
+`~/.local/bin`. Because the proxy git relay is scoped, the source is
+fetched as an HTTPS tarball from codeload; a new sha needs `go` +
+network, after which it's cached. To pin a specific commit (e.g. for a
+reproducible CI run), pass `BORU_REF=<sha>`. To wire the gate into CI,
+add a step that runs `bash test/diverge.sh` after the suites; note that
+editing `.github/workflows/` needs a token with `workflow` scope.
