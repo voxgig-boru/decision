@@ -15,9 +15,9 @@ def table (Decision.make-table [
   (Decision.make-rule {field:"age" op:"gte" value:65} {category:"senior"})
 ])
 
-print (Decision.decide table {age:12})   # => {category: minor}
-print (Decision.decide table {age:70})   # => {category: senior}
-print (Decision.decide table {age:30})   # => {ok:false error:no-match}
+print (Decision.decide table {age:12})   # => {"category": "minor"}
+print (Decision.decide table {age:70})   # => {"category": "senior"}
+print (Decision.decide table {age:30})   # => {"ok": false, "error": "no-match"}
 ```
 
 > **Calling convention.** boru is forward: the verb first, arguments

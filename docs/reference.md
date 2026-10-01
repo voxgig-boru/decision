@@ -150,7 +150,7 @@ Construct a single condition.
 
 ```boru
 print (Decision.cond age/q "gte" 18)
-# => {field: age, op: gte, value: 18}
+# => {"field": age, "op": "gte", "value": 18}
 ```
 
 ### `Decision.all-of`
@@ -165,7 +165,7 @@ Build an *every-child-must-hold* predicate.
 
 ```boru
 print (Decision.all-of [{field:"age" op:"gte" value:18} {field:"score" op:"gt" value:50}])
-# => {kind: group, op: all, children: [{field: age, op: gte, value: 18}, {field: score, op: gt, value: 50}]}
+# => {"kind": "group", "op": "all", "children": [{"field": "age", "op": "gte", "value": 18}, {"field": "score", "op": "gt", "value": 50}]}
 ```
 
 ### `Decision.any-of`
@@ -190,7 +190,7 @@ Negate a single condition.
 
 ```boru
 print (Decision.not-of {field:"age" op:"lt" value:18})
-# => {kind: group, op: not, children: {field: age, op: lt, value: 18}}
+# => {"kind": "group", "op": "not", "children": {"field": "age", "op": "lt", "value": 18}}
 ```
 
 ### `Decision.make-rule`
@@ -205,7 +205,7 @@ Pair a `when` condition/predicate with a `then` result.
 
 ```boru
 print (Decision.make-rule {field:"age" op:"gte" value:18} {category:"adult"})
-# => {when: {field: age, op: gte, value: 18}, then: {category: adult}}
+# => {"when": {"field": "age", "op": "gte", "value": 18}, "then": {"category": "adult"}}
 ```
 
 `then` MUST be a Map.
@@ -222,7 +222,7 @@ Assemble a list of rules into a table.
 
 ```boru
 print (Decision.make-table [{when:{field:"age" op:"lt" value:18} then:{category:"minor"}}])
-# => {kind: table, rules: [{when: {field: age, op: lt, value: 18}, then: {category: minor}}], hit-policy: first}
+# => {"kind": "table", "rules": [{"when": {"field": "age", "op": "lt", "value": 18}, "then": {"category": "minor"}}], "hit-policy": "first"}
 ```
 
 ### `Decision.with-policy`
@@ -238,7 +238,7 @@ Copy a table with a new hit policy.
 ```boru
 def t (Decision.make-table [{when:{field:"x" op:"gt" value:0} then:{s:"pos"}}])
 print (Decision.with-policy "unique" t)
-# => {kind: table, rules: [{when: {field: x, op: gt, value: 0}, then: {s: pos}}], hit-policy: unique}
+# => {"kind": "table", "rules": [{"when": {"field": "x", "op": "gt", "value": 0}, "then": {"s": "pos"}}], "hit-policy": "unique"}
 ```
 
 ### `Decision.make-branch`
@@ -253,7 +253,7 @@ Build an interior tree node.
 
 ```boru
 print (Decision.make-branch root/q [{when:{field:"age" op:"gte" value:18} next:"adult"}])
-# => {id: root, kind: branch, branches: [{when: {field: age, op: gte, value: 18}, next: adult}]}
+# => {"id": root, "kind": "branch", "branches": [{"when": {"field": "age", "op": "gte", "value": 18}, "next": "adult"}]}
 ```
 
 ### `Decision.make-leaf`
@@ -268,7 +268,7 @@ Build a terminal tree node.
 
 ```boru
 print (Decision.make-leaf adult/q {category:"adult"})
-# => {id: adult, kind: leaf, result: {category: adult}}
+# => {"id": adult, "kind": "leaf", "result": {"category": "adult"}}
 ```
 
 ### `Decision.make-tree`
@@ -283,7 +283,7 @@ Assemble a root id and node list into a tree.
 
 ```boru
 print (Decision.make-tree root/q [{id:"root" kind:"leaf" result:"x"}])
-# => {kind: tree, root: root, nodes: [{id: root, kind: leaf, result: x}]}
+# => {"kind": "tree", "root": root, "nodes": [{"id": "root", "kind": "leaf", "result": "x"}]}
 ```
 
 ### `Decision.apply-op`
@@ -364,7 +364,7 @@ def tbl (Decision.make-table [
   {when:{field:"age" op:"lt"  value:18} then:{category:"minor"}}
   {when:{field:"age" op:"gte" value:18} then:{category:"adult"}}
 ])
-print (Decision.eval-table tbl {age:25})   # => {category: adult}
+print (Decision.eval-table tbl {age:25})   # => {"category": "adult"}
 ```
 
 Pass the **table** (`make-table rules`), not the raw rules list. The
@@ -411,7 +411,7 @@ Dispatch on `model.kind` — `"table"` runs `eval-table`, `"tree"` runs
 def model (Decision.make-table [
   (Decision.make-rule {field:"x" op:"gt" value:0} {sign:"positive"})
 ])
-print (Decision.decide model {x:5})   # => {sign: positive}
+print (Decision.decide model {x:5})   # => {"sign": "positive"}
 ```
 
 > **Known boru-check false positive (boru main @ `64c5ab2`).** Passed a
@@ -463,7 +463,7 @@ def tags (Decision.with-policy "collect" (Decision.make-table [
   (Decision.make-rule {field:"age"   op:"gte" value:18} {tag:"adult"})
   (Decision.make-rule {field:"score" op:"gte" value:50} {tag:"passing"})
 ]))
-print (Decision.decide tags {age:25 score:80})   # => [{tag: adult}, {tag: passing}]
+print (Decision.decide tags {age:25 score:80})   # => [{"tag": "adult"}, {"tag": "passing"}]
 ```
 
 ---

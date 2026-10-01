@@ -128,13 +128,58 @@ print (L.f {kind:"other"})
 # expected: 0   actual: check: 2:70: [error] no_signature: cannot call `cnt` … got (None); nearest [List]
 ```
 
+The same program in **one** file (`def cnt …`, `def f …`, `print (f
+{kind:"other"})`) checks clean and prints `0`, so the trigger is the import
+boundary plus a concrete literal argument; `boru -no-check main.boru` also
+prints `0` (the run itself is correct — only the pre-flight check blocks it).
+
+The library-level repro — the exact case `AGENTS.md` warns about (a scratch
+dir holding a copy of `decision.aql`):
+
+```boru
+import "./decision.aql"
+def tree {kind:"tree" root:"root" nodes:[
+  {id:"root" kind:"leaf" result:"welcome"}
+]}
+print (Decision.decide tree {age:40})
+# expected: welcome
+# actual:   check: 180:157: [error] no_signature: cannot call `eval-table-first` — no signature
+#           matches the arguments; got (Map, None); nearest [List Map] … (×5, one per
+#           eval-table-* call in decide's untaken "table" arm) → check failed: 5 error(s)
+```
+
+`def tbl {kind:"table" policy:"first" rules:[]}` + `Decision.decide tbl
+{age:40}` is the mirror image (2 errors: `cannot call find-node … got (None,
+None)` from the untaken "tree" arm). `Decision.eval-tree tree {age:40}` and
+`Decision.decide (Decision.make-tree root/q [(Decision.make-leaf root/q
+"welcome")]) {age:40}` both check clean and print `welcome` — the builders
+return a Map whose fields the checker does not specialise. No NUR / check-
+accuracy record found for this shape (NUR.md is the answer-divergence
+register; `design/CHECK-ACCURACY-RATCHET.10.md` lists none like it).
+
+**Not hit here: the `boru:test` type-ID collision.** On `64c5ab2`
+`boru:test` mints its record types from a fresh type-ID counter, so in a
+program that imports `boru:test` a library fn *declared to return its own
+class* fails its return contract (`expected X, got X`; the sibling bloom and
+stats libraries import their module before `boru:test` to dodge it). Every
+`Decision` word is declared to return `Map`, `Boolean` or `Any` — the
+`refine Record` types are documentation, never a return contract — so the
+suites keep their `import "boru:test"` first. Verified: builders, `decide`
+on a builder table and on a builder tree all run correctly after
+`import "boru:test"`.
+
 ### Original findings, re-checked on `64c5ab2`
 
 **1** still open (no tags at all now; `cmd/go/go.mod` still carries local
 `replace`s). **2** still partial: the swapped `Decision.with-policy t
 "collect"` is now an `uncalled_function` *check error* (it blocks the run —
 better), but with no swap hint, and the Map/Map swap `Decision.decide
-{age:25} table` still silently returns `unknown-model-kind`. **3, 4, 6, 8**
+{age:25} table` still silently returns `unknown-model-kind`. The plain-word
+hint the `7193a7d3` re-review saw is gone as well: a plain
+`def wp fn [[policy:String table:Map] [Map] [table]]` called `wp {a:1} "x"`
+reports `no_signature … got (Map, ProperString); nearest [String Map]` with
+no reorder suggestion. (`mixed_form_call` cannot help: it fires only for 3+-
+argument *mixed-form* calls whose deepest stack slot is `Any`.) **3, 4, 6, 8**
 remain fixed. **5** and **7**: behaviour unchanged by design; the proposed
 `check` lints are still absent (`"a" print "b" print` prints `b a`, and
 `{a:1} {a:1} eq` draws no warning).

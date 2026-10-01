@@ -98,9 +98,9 @@ def rules [
   (Decision.make-rule {field:"age" op:"gte" value:18} {category:"adult"})
 ]
 def table (Decision.make-table rules)
-print (Decision.decide table {age:12}) end   # => {category: minor}
-print (Decision.decide table {age:70}) end   # => {category: senior}
-print (Decision.decide table {age:30}) end   # => {category: adult}
+print (Decision.decide table {age:12}) end   # => {"category": "minor"}
+print (Decision.decide table {age:70}) end   # => {"category": "senior"}
+print (Decision.decide table {age:30}) end   # => {"category": "adult"}
 ```
 
 Rule **order matters** under the default `"first"` policy: `age 70`
@@ -134,8 +134,8 @@ def high  (Decision.cond score/q "gte" 90)
 # all-of: EVERY child must hold
 def rule (Decision.make-rule (Decision.all-of [adult high]) {tier:"premium"})
 def tbl (Decision.make-table [rule])
-print (Decision.decide tbl {age:25 score:95}) end   # => {tier: premium}
-print (Decision.decide tbl {age:25 score:50}) end   # => {ok:false error:no-match}
+print (Decision.decide tbl {age:25 score:95}) end   # => {"tier": "premium"}
+print (Decision.decide tbl {age:25 score:50}) end   # => {"ok": false, "error": "no-match"}
 ```
 
 `any-of` holds when **at least one** child does, and `not-of` negates a
@@ -147,10 +147,10 @@ def adult (Decision.cond age/q   "gte" 18)
 def high  (Decision.cond score/q "gte" 90)
 
 def any-tbl (Decision.make-table [(Decision.make-rule (Decision.any-of [adult high]) {ok:"yes"})])
-print (Decision.decide any-tbl {age:10 score:95}) end   # => {ok: yes}
+print (Decision.decide any-tbl {age:10 score:95}) end   # => {"ok": "yes"}
 
 def not-tbl (Decision.make-table [(Decision.make-rule (Decision.not-of (Decision.cond age/q "lt" 18)) {adult:true})])
-print (Decision.decide not-tbl {age:25}) end            # => {adult: true}
+print (Decision.decide not-tbl {age:25}) end            # => {"adult": true}
 ```
 
 You can also write a predicate as a Map literal — a compound condition
@@ -184,7 +184,7 @@ def rules [
 
 # "first" (default): the first matching rule's then
 def first-tbl (Decision.make-table rules)
-print (Decision.decide first-tbl {score:75}) end   # => {grade: pass}
+print (Decision.decide first-tbl {score:75}) end   # => {"grade": "pass"}
 ```
 
 **`"unique"`** expects exactly one match. Zero matches give
@@ -198,14 +198,14 @@ def utbl (Decision.with-policy "unique" (Decision.make-table [
   (Decision.make-rule {field:"score" op:"lt"  value:50} {grade:"fail"})
   (Decision.make-rule {field:"score" op:"gte" value:50} {grade:"pass"})
 ]))
-print (Decision.decide utbl {score:75}) end   # => {grade: pass}
+print (Decision.decide utbl {score:75}) end   # => {"grade": "pass"}
 
 # overlapping rules under "unique" -> multiple-matches
 def overlap (Decision.with-policy "unique" (Decision.make-table [
   (Decision.make-rule {field:"score" op:"gte" value:50} {a:1})
   (Decision.make-rule {field:"score" op:"gte" value:0}  {b:2})
 ]))
-print (Decision.decide overlap {score:75}) end   # => {ok:false error:multiple-matches}
+print (Decision.decide overlap {score:75}) end   # => {"ok": false, "error": "multiple-matches"}
 ```
 
 **`"collect"`** returns a **List** of every matching rule's `then` —
@@ -217,7 +217,7 @@ def tags (Decision.with-policy "collect" (Decision.make-table [
   (Decision.make-rule {field:"age"   op:"gte" value:18} {tag:"adult"})
   (Decision.make-rule {field:"score" op:"gte" value:50} {tag:"passing"})
 ]))
-print (Decision.decide tags {age:25 score:80}) end   # => [{tag: adult}, {tag: passing}]
+print (Decision.decide tags {age:25 score:80}) end   # => [{"tag": "adult"}, {"tag": "passing"}]
 ```
 
 **`"priority"`** returns the matching rule with the highest `priority`
@@ -231,8 +231,8 @@ def ptbl (Decision.with-policy "priority" (Decision.make-table [
   {when:{field:"score" op:"gte" value:50} then:{tier:"standard"} priority:1}
   {when:{field:"score" op:"gte" value:90} then:{tier:"premium"}  priority:5}
 ]))
-print (Decision.decide ptbl {score:95}) end   # => {tier: premium}   (priority 5 beats 1)
-print (Decision.decide ptbl {score:60}) end   # => {tier: standard}  (only rule 1 matches)
+print (Decision.decide ptbl {score:95}) end   # => {"tier": "premium"}   (priority 5 beats 1)
+print (Decision.decide ptbl {score:60}) end   # => {"tier": "standard"}  (only rule 1 matches)
 ```
 
 ---
@@ -316,7 +316,7 @@ def out (Decision.decide table {age:30})
 print (if ((out.ok) false eq) ["no rule matched"] [out]) end   # => no rule matched
 
 def out2 (Decision.decide table {age:70})
-print (if ((out2.ok) false eq) ["no rule matched"] [out2]) end   # => {category: senior}
+print (if ((out2.ok) false eq) ["no rule matched"] [out2]) end   # => {"category": "senior"}
 ```
 
 `(out.ok)` reads `false` on a miss and `None` on a hit, so
@@ -330,7 +330,7 @@ def table (Decision.make-table [
 ])
 def out (Decision.decide table {age:30})
 print (out.error) end                       # => no-match
-print (Decision.decide {kind:"graph"} {x:1}) end   # => {ok:false error:unknown-model-kind}
+print (Decision.decide {kind:"graph"} {x:1}) end   # => {"ok": false, "error": "unknown-model-kind"}
 ```
 
 The full set of error strings: `"no-match"`, `"multiple-matches"`

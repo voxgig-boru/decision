@@ -54,16 +54,18 @@ backwards — prefer forward. What you must **not** do is put the receiver
 ```boru
 import "./decision.aql"
 def table (Decision.make-table [(Decision.make-rule {field:"age" op:"gte" value:18} {category:"adult"})])
-print (Decision.decide table {age:25})    # ✓ model, then input (receiver) last => {category: adult}
+print (Decision.decide table {age:25})    # ✓ model, then input (receiver) last => {"category": "adult"}
 print (Decision.decide {age:25} table)    # ✗ receiver first: binds model:={age:25}
-                                          #   => {ok:false error:"unknown-model-kind"}
+                                          #   => {"ok": false, "error": "unknown-model-kind"}
 ```
 
-That swap is **silent**. `model` and `input` are both `Map`, so nothing
-type-checks it, and — unlike a plain word — `boru check`'s `mixed_form_call`
-nudge does **not** fire on the namespaced `Decision.*` dispatch path. You just
-get a plausible-looking error Map (`unknown-model-kind`, or `no-match`) back,
-so getting the order right matters. (`eval-table` / `with-policy` are luckier:
+That swap is **silent**. `model` and `input` are both `Map`, so no signature
+rejects it, and `boru check` has no diagnostic for it: an all-forward call is
+not a mixed-form call, so the `mixed_form_call` advisory (which fires only for
+3+-argument mixed-form calls whose deepest stack slot is `Any`) never applies,
+and boru has no "did you mean the other order?" hint. You just get a
+plausible-looking error Map (`unknown-model-kind`, or `no-match`) back, so
+getting the order right matters. (`eval-table` / `with-policy` are luckier:
 a swap there mismatches a type and raises, rather than returning a fake miss.)
 
 - **Wrap a call in parens, or end it,** when a bare value would otherwise
@@ -127,9 +129,9 @@ def rules [
   (Decision.make-rule {field:"age" op:"gte" value:65} {category:"senior"})
 ]
 def table (Decision.make-table rules)
-print (Decision.decide table {age:12})   # => {category: minor}
-print (Decision.decide table {age:70})   # => {category: senior}
-print (Decision.decide table {age:30})   # => {ok:false error:no-match}
+print (Decision.decide table {age:12})   # => {"category": "minor"}
+print (Decision.decide table {age:70})   # => {"category": "senior"}
+print (Decision.decide table {age:30})   # => {"ok": false, "error": "no-match"}
 ```
 
 Collect every matching rule instead of just the first:
@@ -139,7 +141,7 @@ def tags (Decision.with-policy "collect" (Decision.make-table [
   (Decision.make-rule {field:"age"   op:"gte" value:18} {tag:"adult"})
   (Decision.make-rule {field:"score" op:"gte" value:50} {tag:"passing"})
 ]))
-print (Decision.decide tags {age:25 score:80})   # => [{tag: adult}, {tag: passing}]
+print (Decision.decide tags {age:25 score:80})   # => [{"tag": "adult"}, {"tag": "passing"}]
 ```
 
 A decision **tree** (branch → leaf), written as a Map literal and run with
