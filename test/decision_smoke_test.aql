@@ -4,7 +4,7 @@
 # below just shows each word doing its job.
 #
 # Run:
-#   aql test/decision_smoke_test.aql
+#   boru test/decision_smoke_test.aql
 #
 # Style: every narrated line uses the forward `print (value)` form — the
 # verb first, its one argument grouped in parens immediately after. Because
@@ -16,7 +16,7 @@
 # parens around each call are still required — `print Decision.foo a b`
 # would print the *word* `foo` and strand `a b`; a `;` does not fix that.)
 
-import "./decision.aql"
+import "../decision.aql"
 
 print "--- decision smoke demo ---"
 

@@ -16,11 +16,11 @@
 # So generated inputs always carry the field a condition reads.
 #
 # Run:
-#   aql test/decision_prop_test.aql
+#   boru test/decision_prop_test.aql
 
 
 import "boru:test" end
-import "./decision.aql" end
+import "../decision.aql" end
 
 
 # --- P1. eval-cond eq reflexivity ----------------------------------
@@ -29,7 +29,7 @@ import "./decision.aql" end
 # a field against its own value is always true. eq is total (works for
 # any value), and the field is present, so this never raises.
 
-Test.check-prop "eval-cond-eq-reflexive"
+def _p1 (Test.check-prop "eval-cond-eq-reflexive"
   [r.int 0 1000]                                      # gen: v in [0, 1000]
   [
     var [[v]
@@ -38,8 +38,7 @@ Test.check-prop "eval-cond-eq-reflexive"
       (Decision.eval-cond cond input)
     ]
   ]
-  50 1 0
-end
+  50 1 0)
 
 
 # --- P2. apply-op eq / neq are complementary -----------------------
@@ -48,8 +47,12 @@ end
 # apply-op with "neq" is the boolean negation of apply-op with "eq".
 # (apply-op rhs op lhs computes `lhs op rhs`.)
 
-Test.check-prop "apply-op-eq-neq-complement"
-  [do {a: [r.int 0 5], b: [r.int 0 5]}]               # gen: small a,b so collisions occur
+def _p2 (Test.check-prop "apply-op-eq-neq-complement"
+  # works around boru compile defect: "a call matched at run time takes a list
+  # or map literal whose evaluation may have an effect (NUR356)" — the
+  # equivalent `do {a: [r.int 0 5], b: [r.int 0 5]}` declines to compile; a
+  # map literal evaluates its paren values directly. Remove when fixed upstream.
+  [{a: (r.int 0 5), b: (r.int 0 5)}]                  # gen: small a,b so collisions occur
   [
     var [[pair]
       def a (pair "a" get)
@@ -59,8 +62,7 @@ Test.check-prop "apply-op-eq-neq-complement"
       is-eq eq (is-neq not)
     ]
   ]
-  50 1 0
-end
+  50 1 0)
 
 
 # --- P3. table "first" returns the FIRST matching then -------------
@@ -70,7 +72,7 @@ end
 # default "first" hit policy, eval-table returns the first rule's then,
 # never the second's. The generated value is >= both thresholds.
 
-Test.check-prop "table-first-wins"
+def _p3 (Test.check-prop "table-first-wins"
   [r.int 100 200]                                     # gen: n well above both rules
   [
     var [[n]
@@ -82,8 +84,7 @@ Test.check-prop "table-first-wins"
       (out "pick" get) eq "first"
     ]
   ]
-  50 1 0
-end
+  50 1 0)
 
 
 # --- P4. tree single-leaf identity ---------------------------------
@@ -92,7 +93,7 @@ end
 # there are no branches to walk, so the input is irrelevant. The leaf
 # result is the generated value; eval-tree must return it unchanged.
 
-Test.check-prop "tree-single-leaf-identity"
+def _p4 (Test.check-prop "tree-single-leaf-identity"
   [r.int 0 1000]                                      # gen: the leaf payload
   [
     var [[payload]
@@ -103,8 +104,7 @@ Test.check-prop "tree-single-leaf-identity"
       out eq payload
     ]
   ]
-  50 1 0
-end
+  50 1 0)
 
 
 # --- summary -------------------------------------------------------
@@ -124,7 +124,15 @@ def _print-results (all-results each [
     0
   ]
 ])
-"---" print
-"fail count: " print (Test.fail-count end) print
-0 (Test.fail-count end) Assert.equal end
-"all green" print
+# One forward `print (value)` per statement, so output stays in source order
+# and nothing reaches across a statement boundary. (The old stack-form
+# summary `"---" print "fail count: " print Test.fail-count end print …`
+# let each `print` collect the NEXT statement's value; on boru main that left
+# `"---"` stranded and the final `Assert.equal` compared fail-count against
+# it — passing only because Assert.equal coerces a mismatched type to the
+# expected type's zero value. See dx-report.md, "Migration to boru main".)
+print "---"
+print "fail count: "
+print (Test.fail-count)
+Assert.equal 0 (Test.fail-count)
+print "all green"

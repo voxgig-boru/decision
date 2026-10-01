@@ -24,12 +24,12 @@
 # which property 2 stays clear of by using only eq/neq.)
 #
 # Run:
-#   aql test/decision_prop_spec.aql
+#   boru test/decision_prop_spec.aql
 
 
 import "boru:test" end
 import "boru:rand" end
-import "./decision.aql" end
+import "../decision.aql" end
 
 
 # --- reporting helper ----------------------------------------------
@@ -160,7 +160,15 @@ def _ (specs each [
 
 # --- summary -------------------------------------------------------
 
-"---" print
-"fail count: " print Test.fail-count end print
-0 Test.fail-count end Assert.equal end
-"all green" print
+# One forward `print (value)` per statement, so output stays in source order
+# and nothing reaches across a statement boundary. (The old stack-form
+# summary `"---" print "fail count: " print Test.fail-count end print …`
+# let each `print` collect the NEXT statement's value; on boru main that left
+# `"---"` stranded and the final `Assert.equal` compared fail-count against
+# it — passing only because Assert.equal coerces a mismatched type to the
+# expected type's zero value. See dx-report.md, "Migration to boru main".)
+print "---"
+print "fail count: "
+print (Test.fail-count)
+Assert.equal 0 (Test.fail-count)
+print "all green"
