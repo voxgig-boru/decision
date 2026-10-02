@@ -118,8 +118,14 @@ shapes. Both words now pass the record to each arm through a `[Map]`-declared
 identity, `def as-map fn [[m:Map] [Map] [m]]`, so the checker sees a plain
 `Map`, not the literal's shape. Runtime behaviour is identical: the same
 results on every probe, and a malformed model, such as a table without
-`rules`, still raises `signature_error`. Each call below was blocked by the
-check before the change and now runs:
+`rules`, still raises `signature_error`. The false positive depends on the
+*first* call: boru check analyses an imported word with the argument shapes of
+its first call, so a program whose first `eval-pred` call takes a
+builder-made predicate never sees it. `test/decision_smoke_test.aql` therefore
+opens with literal-model calls, so the gate fails if the workaround is
+dropped (verified: against the pre-workaround `decision.aql` its pre-flight
+check fails with 5 errors). Each call below was blocked by the check before
+the change and now runs:
 
 ```boru
 import "./decision.aql"
