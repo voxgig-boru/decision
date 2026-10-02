@@ -17,13 +17,16 @@
 #
 # Generator bodies are GROUPED — `[ (r.int 0 40) ]`, and a Map input as a
 # grouped literal `[ ({a: (r.int 0 9), b: (r.int 0 9)}) ]`. The bare
-# `[ r.int 0 40 ]` and the `do { a: [r.int 0 9] … }` spelling decline their
-# runtime compile stamp and run on the interpreter (boru COMPILABLE-SUBSET
-# §5, boru-lang/boru#528); the grouped forms compile and draw byte-identical
-# values for the same seed. Property 4 names its fold-loop rule `candidate`,
-# not `rule`: a callback's `var` that reuses the name of a loop-carried
-# `def` inside a word it calls (decision.aql's eval-table-* loops bind
-# `rule`) declines the stamp the same way ("undef of the loop-carried def").
+# `[ r.int 0 40 ]` declines its runtime compile stamp ("closure
+# storedfn$body: unapplied fn-value in body residual") and the
+# `do { a: [r.int 0 9] … }` spelling declines it too ("finalize left the
+# unit unstamped"); a declined callback runs on the interpreter (boru
+# COMPILABLE-SUBSET §5, boru-lang/boru#528). The grouped forms compile and
+# draw byte-identical values for the same seed. Property 4 names its
+# `each`-body rule `candidate`, not `rule`: a callback's `var` that reuses
+# the name of a loop-carried `def` inside a word it calls (decision.aql's
+# eval-table-* `for` loops bind `rule`) declines the stamp as well ("undef
+# of the loop-carried def `rule` (Stage 3)"; dx-report.md row K).
 #
 # GOTCHA honoured here: an ordering op (lt/lte/gt/gte) on a MISSING field
 # raises `not_comparable` (a missing field is None, not Comparable). Every
@@ -111,6 +114,8 @@ def specs [
   #    of matching rules. The expected count is computed independently by
   #    folding eval-pred over the same rules. All rules compare `v`, which
   #    is always present, so the ordering ops never see a missing field.
+  #    The each-body var is `candidate`, not `rule` (see the header: `rule`
+  #    declines the compile stamp — dx-report.md row K).
   (Test.prop "collect-length-equals-match-count"
     [ (r.int 0 40) ]
     [ var [[v]

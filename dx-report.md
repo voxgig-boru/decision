@@ -207,16 +207,17 @@ open callback refusals ([boru-lang/boru#528](https://github.com/boru-lang/boru/p
 the suite, close all 11:
 
 - **A direct draw is grouped:** `[ r.int 0 40 ]` → `[ (r.int 0 40) ]`
-  (spec 90/105/125/139, test P1/P3/P4). The bare form declined with
-  "closure storedfn$body: unapplied fn-value in body residual (dynamic apply
-  not lowered)".
+  (spec properties 3–6, at pre-change lines 90/105/125/139; test
+  P1/P3/P4). The bare form declined with "closure storedfn$body: unapplied
+  fn-value in body residual (dynamic apply not lowered)".
 - **A Map input is a grouped literal:**
   `[ do { a: [r.int 0 9], b: [r.int 0 9] } ]` → `[ ({ a: (r.int 0 9), b: (r.int 0 9) }) ]`
-  (spec 62/74, which declined "finalize left the unit unstamped"), and test
-  P2's bare `[{a: (r.int 0 5), b: (r.int 0 5)}]` →
+  (spec properties 1–2, at pre-change lines 62/74, which declined
+  "finalize left the unit unstamped"), and test P2's bare
+  `[{a: (r.int 0 5), b: (r.int 0 5)}]` →
   `[({a: (r.int 0 5), b: (r.int 0 5)})]` ("body result of unknown
   provenance").
-- **Spec property 4's fold-loop `var` is renamed `rule` → `candidate`.** It
+- **Spec property 4's `each`-body `var` is renamed `rule` → `candidate`.** It
   declined with "undef of the loop-carried def `rule` (Stage 3)". The trigger
   is the name: a callback's `var` that reuses the name of a loop-carried
   `def` inside a word the callback calls declines (decision.aql's
@@ -247,16 +248,23 @@ generator bodies through `Test.check-prop` (spec bodies through
 suite's own configuration (seed 1, 100 / 50 runs) and seeds 4, 250 and 99999
 at 25 runs each. Old and new outputs were byte-identical: 1,078 lines for
 the six spec generators and 520 for the four test generators. Property 4,
-instrumented to print `[v collected expected decided]`, gave 187 identical
-lines, all `true`. The suites' actual generator and property bodies, re-run
-under the same four seed settings, gave identical PropertyResult maps
-(24 + 16, all `ok: true` at full run counts). Each suite's own output is
-unchanged. No compiled answer differed from the interpreter's, and none of
-the already-known generator divergences (an inline nested generator losing
-`r`, a bare named-fn nested generator repeating its first draw, a `def`
-inside a generator) applies here: no generator in this library nests. The
-known NUR356 refusal (row C) recurred in probing: `(do {…})` inside a named
-generator fn fails to compile the same way.
+instrumented to print `[v collected expected decided]`, gave 175
+identical rows (187 output lines), every row `true`. The suites' actual
+generator and property bodies, re-run under the same four seed settings,
+gave identical PropertyResult maps (24 + 16, all `ok: true` at full run
+counts). Each suite's own output is unchanged. An independent re-check at
+seeds 7, 31337, 2026 and 777777 (25–40 runs) — every generator with a
+printing property, every real property body instrumented to print its
+input and decision, and the unmodified bodies — was byte-identical old vs
+new, and the old harnesses reproduced the suites' declines (6 for the
+spec generators alone, 7 with the real spec property bodies, 4 for the
+test generators). The grouped and bare generators also shrink a failing
+input identically. No compiled answer differed from the interpreter's, and
+none of the already-known generator divergences (an inline nested
+generator losing `r`, a bare named-fn nested generator repeating its first
+draw, a `def` inside a generator) applies here: no generator in this
+library nests. The known NUR356 refusal (row C) recurred in probing:
+`(do {…})` inside a named generator fn fails to compile the same way.
 
 ### Open upstream defects found
 

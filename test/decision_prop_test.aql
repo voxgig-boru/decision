@@ -11,7 +11,8 @@
 #           (also reachable as `args.0`); must return a Boolean.
 #
 # Generator member calls are grouped — `[(r.int 0 1000)]`, not
-# `[r.int 0 1000]`: the bare form declines its runtime compile stamp and runs
+# `[r.int 0 1000]`: the bare form declines its runtime compile stamp
+# ("closure storedfn$body: unapplied fn-value in body residual") and runs
 # on the interpreter (boru COMPILABLE-SUBSET §5, boru-lang/boru#528); the
 # grouped form compiles and draws byte-identical values for the same seed.
 #
