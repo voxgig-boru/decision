@@ -81,7 +81,9 @@ list of sub-conditions (a single condition Map for `"not"`).
 
 `gen [R] refine Record [when:Map then:R]` — a `when → then` pairing,
 generic in its result type `R`. `when` is a condition or predicate Map;
-`then` is the result yielded when `when` holds. Bare, it reads as
+`then` is the result yielded when `when` holds, returned exactly as
+stored under every hit policy — a function value comes back as a value
+and is never called by decision. Bare, it reads as
 `schema<Record/Rule>[R]`; instantiated, `Rule of [Map]` recovers the
 concrete `record{when:Map then:Map}`.
 
@@ -114,8 +116,10 @@ List of `{when:… next:…}` maps: each `when` is a condition/predicate and
 `gen [R] refine Record [id:Atom kind:String result:R]` — a terminal
 tree node, generic in its result type `R`. `id` is the node id (Atom),
 `kind` is `"leaf"`, `result` is the value returned when the walk reaches
-this node. Instantiated, `LeafNode of [Integer]` pins the result field
-to `record{id:Atom kind:String result:Integer}`.
+this node, exactly as stored (a function value is returned, not called;
+apply it yourself with `args out/v apply`). Instantiated,
+`LeafNode of [Integer]` pins the result field to
+`record{id:Atom kind:String result:Integer}`.
 
 ### `Comparable`
 

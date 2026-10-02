@@ -41,6 +41,12 @@ unchanged. Every code example in `AGENTS.md`, the skill,
 `README.md` and `docs/` was executed against this build and fixed where it no
 longer behaved as documented.
 
+Separately, a **library fix** (2026-10-02) makes a rule's `then` and a leaf's
+`result` data on every path: decision now returns a function stored there and
+never calls it. It is a change to the library's semantics, kept whatever
+happens upstream; the compiler defects it brought to light are recorded
+upstream (rows G–J below).
+
 ### Breaking changes hit
 
 | Change | Upstream | What it took here |
@@ -135,6 +141,59 @@ print (Decision.decide {kind:"tree" root:"r" nodes:[{id:"r" kind:"leaf" result:"
 print (Decision.decide {kind:"table" rules:[{when:{field:"age" op:"gte" value:18} then:"adult"}]} {age:25}) # => adult
 ```
 
+### Library fix: a stored `then` / leaf `result` is data (2026-10-02)
+
+Not a workaround: this is the library's own contract, and it stays when the
+upstream defects below are fixed. A rule's `then` and a leaf's `result` are
+the decision's **result value**. The evaluators now return them exactly as
+stored on every path. A function stored there comes back as a Function value
+(read it with `/v`), and decision never calls it.
+
+Before, the answer depended on the path. Each evaluator ended by reading the
+value through a bare name (`… end result`), and in boru a bare name holding a
+function calls it (ADR-011). What happened to a fn stored in `then` /
+`result` on `64c5ab2`:
+
+| Path | Before | Why | Now |
+|---|---|---|---|
+| `first` and `priority` hit policies; trees | **called** (the result was the fn's return value) | bare tail read; the stamp declined (row G), so the fn ran on the interpreter, which dispatches the read | the Function |
+| `unique` | returned uncalled | bare read in an `if` arm after the `for`; that unit compiled, and the compiled read does not dispatch (row I, a miscompile) | the Function |
+| `collect` | returned uncalled | the values are pushed into a list, never read by name | the Function |
+| `make-leaf` with a fn `result` | **the program did not compile** (`` fn make-leaf: bare read of `result` is consumed where the interpreter dispatches it (a container member …) — NUR123 ``) | the bare read sat inside the record literal | a `LeafNode` holding the fn |
+
+The fix reads each value with `/v` at seven sites: the tails of
+`eval-table-first`, `eval-table-priority`, `eval-tree`, `find-node` and
+`find-branch-next`, the `unique` arm, and `make-leaf`'s record literal.
+(`make-rule` is unchanged: its `then` parameter is declared `Map`, so a fn
+`then` can only come from a literal rule.) Data results are unaffected:
+every suite's expected values are unchanged, and the bench checksum stays
+`1184`. As a side effect, the five functions whose stamp declined (row G)
+now stamp, so every `Decision` word runs compiled (`boru -compile-report`
+lists no library declines). `test/decision_unit_test.aql`'s
+`stored-fn-results-are-data` case checks all six paths: four hit policies,
+a literal tree and a builder tree. Against the previous `decision.aql` it
+fails. The builder row stops the suite compiling, and without that row the
+case fails (fail count 1). `AGENTS.md`, the skill, `docs/reference.md` and
+`api.json` (`conventions.results_are_data`) document the contract.
+
+```boru
+import "./decision.aql"
+def f42 ([] => [42])
+def w {field:"age" op:"gte" value:18}
+def out (Decision.decide {kind:"table" hit-policy:"first" rules:[{when:w then:f42/v}]} {age:25})
+print (out/v typeof)
+# now: Function    before: Integer (first/priority/trees called it; unique/collect did not)
+```
+
+**Calling a returned function.** It is the caller's to call, and on
+`64c5ab2` only some spellings agree with the interpreter (row J). These do,
+and are what the docs name: `41 out/v apply` (arguments first, then the
+value with `/v`), or passing `out/v` to a fn whose parameter is declared
+`Function` (`(g n)` inside it; `(g)` for a 0-arg one). `print (41 out) 7`
+compiles and answers wrongly without an error (it prints `41` and leaves
+`8`; the interpreter prints `42` and leaves `7`). `(out 41)` and a 0-arg
+`out/v apply` fail to compile.
+
 ### Open upstream defects found
 
 | # | Kind | Defect | Record | Effect here |
@@ -145,6 +204,10 @@ print (Decision.decide {kind:"table" rules:[{when:{field:"age" op:"gte" value:18
 | D | compile defect | dynamic-scope def of an unpromoted computed value | COMPILABLE-SUBSET "dynamic-scope def family" | worked around (3) |
 | E | runtime answer bug | **`Assert.equal` coerces a mismatched type to the expected type's zero value**: `Assert.equal 0 "A"`, `Assert.equal "" 5`, `Assert.equal false [1]` all *pass*. `assertEqualHandler` calls `core.ValuesEqual`, which assumes both sides share a type and reads the second through the first's accessor (`AsInteger("A")` → 0). Any `Assert.equal` whose computed side is `0`/`""`/`false` passes against a value of another type. | unrecorded | masked the broken suite summaries until they were fixed; the unit suite was re-verified with a structural `deq` check (all 35 assertions hold) |
 | F | checker false positive | **`boru check` analyses an imported fn's untaken `if` arm with the caller's concrete Map literal** and reports `no_signature` on the absent (None) field, which blocks the run. `Decision.decide` with a Map-literal model hits it (a literal tree has no `rules`: `cannot call eval-table-first … got (Map, None)`; a literal table has no `nodes`: `cannot call find-node … got (None, None)`), and so does `Decision.eval-pred` with a bare-condition literal (`cannot call eval-pred-all … got (Map, None)`) or a group literal (`cannot call convert … got (None, Word)` in `eval-cond`). The same program in one file checks clean. The excerpt printed is the importing file's while the position is the imported module's. | unrecorded | worked around in the library (4); the suites were never affected (they pass literals only inside `Test.test` bodies or through `Test.run-spec`, which the check does not specialise) |
+| G | compile refusal | **A file-imported fn whose body result is a bare read of a gradual non-parameter binding declines its stamp** (`` stored fn: bare read of `result` may hold a fn the interpreter dispatches as a word (NUR279) ``), so every call of it runs on the interpreter, data or fn. | `design/COMPILABLE-SUBSET.md` §5, open refusals recorded 2026-10-02 ([boru-lang/boru#528](https://github.com/boru-lang/boru/pull/528)) | five functions declined (`eval-table-first`, `eval-table-priority`, `eval-tree`, `find-node`, `find-branch-next`); none now, since the library fix above reads `/v` |
+| H | runtime answer bug | **such a declined fn that breaks its declared return count raises `internal_error` compiled** (`dynamic frame replay … result count 2 differs from the declared 1`), where the interpreter raises the return contract's `type_error` | NUR366 ([#528](https://github.com/boru-lang/boru/pull/528)) | none: found while narrowing row G; every `Decision` fn leaves exactly its declared values |
+| I | runtime answer bug (**silent**) | **a local rebound in a `for` / `while` body and read bare in an `if` arm after the loop, holding a fn, comes back uncalled compiled**; the interpreter calls it. With an `each` / `for-each` body the compiled lane raises instead. One-file repro, `boru check` clean. | NUR367 ([#528](https://github.com/boru-lang/boru/pull/528)) | made the `unique` hit policy return a stored fn uncalled while `first` / `priority` called it; none now (the library fix) |
+| J | runtime answer bug (**silent**) + compile refusals | **calling a fn value obtained at run time and held in a local**: `print (41 out) 7` prints `41` and leaves `8` compiled (the interpreter prints `42` and leaves `7`; `boru check` clean); a 0-arg one bound `def r (out)` reads back `undefined_word`; most other spellings (`(out 41)`, a 0-arg `out/v apply`, `[(41 out) 7]`) fail to compile | NUR368 + `design/COMPILABLE-SUBSET.md` §5 ([#528](https://github.com/boru-lang/boru/pull/528)) | a caller applying a returned `then` / `result`; the docs name `41 out/v apply` and a `Function`-typed param, which agree |
 
 Minimal standalone repro for F (two files):
 

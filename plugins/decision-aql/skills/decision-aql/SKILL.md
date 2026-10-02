@@ -113,6 +113,13 @@ always supplies a `value`, so a unary op there raises).
 `"collect"` a **List** of every match's `then`; `"priority"` the match with the
 highest `priority` field (default `0`).
 
+**Results are data** — a rule's `then` / a leaf's `result` is returned exactly
+as stored under every hit policy and from trees; a function stored there comes
+back as a Function value, never called by decision. Apply it yourself with
+`41 out/v apply` (arguments first) or through a `Function`-typed param; other
+call spellings hit open boru compiler defects on `64c5ab2`
+(`print (41 out) 7` prints `41`).
+
 **Error results** — evaluators never throw on a miss; they return a Map
 `{ok:false error:…}`: `"no-match"`, `"multiple-matches"`,
 `"unknown-model-kind"`, `"no-branch-match"`, `"node-not-found"`,

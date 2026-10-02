@@ -131,6 +131,17 @@ write them as Map literals; the evaluators only read fields.
 - `"priority"` — the matching rule with the highest `priority` field (default
   `0`).
 
+**Results are data.** A rule's `then` and a leaf's `result` come back
+exactly as stored, under every hit policy and from trees. A function stored
+there is returned as a Function value — decision never calls it. To call it
+yourself, keep it with `/v` and **apply** it, arguments first:
+`def out (Decision.decide table input)` then `41 out/v apply`. Or pass
+`out/v` to a fn whose parameter is declared `Function`, which also covers a
+0-arg function (`def call0 fn [[g:Function] [Any] [(g)]]`). Other spellings
+of the call hit open boru compiler defects on `64c5ab2`, and one of them
+answers wrongly without an error: `print (41 out) 7` prints `41`
+(`dx-report.md`, row J).
+
 **Error results** — evaluators never throw on a miss; they return a Map:
 `{ok:false error:"no-match"}`, `"multiple-matches"`, `"unknown-model-kind"`,
 `"no-branch-match"`, `"node-not-found"`, `"unknown-node-kind"`,
@@ -222,6 +233,7 @@ print (Decision.apply-op 18 "gte" 25)                                  # => true
 | compare a Map/List with `lt` | compare scalars (or `eq`/`neq` only) | Ordering ops need **Comparable** operands; otherwise `apply-op` raises `not_comparable`. |
 | treat a miss as an exception | inspect `result.error` (a hit has none) | A *non-match* returns `{ok:false error:"…"}` (no throw); a hit is your bare `then`/leaf value, with no `ok`/`error` fields. |
 | an ordering op (`lt`/`gte`/…) on a maybe-missing field | guarantee the field is present, or compare it only with `eq`/`neq` | A missing field is `None`, not Comparable, so an ordering op **raises** `not_comparable`. (`eq`/`neq` return false for a missing field; the unary `is_*` ops can't gate this — they aren't usable in conditions.) |
+| expecting `decide` to call a function stored in `then` / a leaf `result` | apply it yourself: `41 out/v apply`, or pass `out/v` to a `Function`-typed param | A stored `then` / `result` is returned as data on every path, never called. Other call spellings (`print (41 out)`, `(out 41)`) hit open boru compiler defects on `64c5ab2` (`dx-report.md` row J). |
 | `make-branch "root" …` | `make-branch root/q …` | The builder's `id` is an **Atom**; quote bare names with `/q`. |
 
 A note on `print` while debugging: `print` collects a forward argument, so a

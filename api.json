@@ -16,7 +16,8 @@
     "import_resolution": "relative to the IMPORTING FILE's own directory (for both `boru file` and `boru check file`), not the working directory \u2014 a script in test/ writes `import \"../decision.aql\"`.",
     "external_deps": [],
     "requires": "needs a current boru main (verified at 64c5ab2, 2026-10-01) \u2014 uses surface/exposes, generics, refine Record, and fnsig. No boru:* deps.",
-    "execution": "boru main has one execution path: `boru file` runs a static pre-flight check, then compiles to bytecode and runs on the VM (no interpreter fallback; --compile/--force-compile/--no-compile are retired). All five suites compile and pass on 64c5ab2."
+    "execution": "boru main has one execution path: `boru file` runs a static pre-flight check, then compiles to bytecode and runs on the VM (no interpreter fallback; --compile/--force-compile/--no-compile are retired). All five suites compile and pass on 64c5ab2.",
+    "results_are_data": "A rule's `then` and a leaf's `result` are returned exactly as stored, under every hit policy and from trees. A function stored there is returned as a Function value (keep it with `/v`); decision never calls it. Apply it yourself with `41 out/v apply` (arguments first) or through a fn whose param is declared Function; other call spellings hit open boru compiler defects on 64c5ab2 (dx-report.md row J)."
   },
   "modules": {
     "decision.aql": {

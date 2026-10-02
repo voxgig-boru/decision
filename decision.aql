@@ -111,7 +111,7 @@ def make-branch fn [[id:Atom branches:List] [Map] [
 ]]
 
 def make-leaf fn [[id:Atom result:Any] [Map] [
-  make LeafNode {id:id kind:"leaf" result:result}
+  make LeafNode {id:id kind:"leaf" result:result/v}
 ]]
 
 def make-tree fn [[root:Atom nodes:List] [Map] [
@@ -182,13 +182,13 @@ def eval-pred fn [[pred:Map input:Map] [Boolean] [if ((pred get "kind") "group" 
 # so dropping it is equivalent. Works around that boru compile defect —
 # the `do` may come back once it is fixed upstream (see dx-report.md).
 
-def eval-table-first fn [[rules:List input:Map] [Any] [def result {ok: false, error: "no-match"} def found false for (rules size) [def idx i def rule (rules idx get) if (found not) [if (input (rule get "when") eval-pred) [def result (rule get "then") def found true] []] []] end result]]
+def eval-table-first fn [[rules:List input:Map] [Any] [def result {ok: false, error: "no-match"} def found false for (rules size) [def idx i def rule (rules idx get) if (found not) [if (input (rule get "when") eval-pred) [def result (rule get "then") def found true] []] []] end result/v]]
 
-def eval-table-unique fn [[rules:List input:Map] [Any] [def result {ok: false, error: "no-match"} def match-count 0 for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def result (rule get "then") def match-count (match-count 1 add)] []] end if (match-count 1 eq) [result] [if (match-count 0 eq) [{ok: false, error: "no-match"}] [{ok: false, error: "multiple-matches"}]]]]
+def eval-table-unique fn [[rules:List input:Map] [Any] [def result {ok: false, error: "no-match"} def match-count 0 for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def result (rule get "then") def match-count (match-count 1 add)] []] end if (match-count 1 eq) [result/v] [if (match-count 0 eq) [{ok: false, error: "no-match"}] [{ok: false, error: "multiple-matches"}]]]]
 
 def eval-table-collect fn [[rules:List input:Map] [Any] [def results quote [] for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def results (quote (results (rule get "then") push))] []] end results]]
 
-def eval-table-priority fn [[rules:List input:Map] [Any] [def best {ok: false, error: "no-match"} def best-pri 0 def found false for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def pri (if ((rule get "priority") None neq) [(rule get "priority")] [0]) if (found not) [def best (rule get "then") def best-pri pri def found true] [if (pri best-pri gt) [def best (rule get "then") def best-pri pri] []]] []] end best]]
+def eval-table-priority fn [[rules:List input:Map] [Any] [def best {ok: false, error: "no-match"} def best-pri 0 def found false for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def pri (if ((rule get "priority") None neq) [(rule get "priority")] [0]) if (found not) [def best (rule get "then") def best-pri pri def found true] [if (pri best-pri gt) [def best (rule get "then") def best-pri pri] []]] []] end best/v]]
 
 # --- eval-table ---
 
@@ -196,13 +196,13 @@ def eval-table fn [[table:Map input:Map] [Any] [def rules quote (table get "rule
 
 # --- eval-tree helpers ---
 
-def find-node fn [[id:Any nodes:List] [Any] [def found None for (nodes size) [def idx i def nd (nodes idx get) if ((nd get "id" convert String) (id convert String) eq) [def found nd] []] end found]]
+def find-node fn [[id:Any nodes:List] [Any] [def found None for (nodes size) [def idx i def nd (nodes idx get) if ((nd get "id" convert String) (id convert String) eq) [def found nd] []] end found/v]]
 
-def find-branch-next fn [[branches:List input:Map] [Any] [def next-id None for (branches size) [def idx i def br (branches idx get) if (input (br get "when") eval-pred) [def next-id (br get "next")] []] end next-id]]
+def find-branch-next fn [[branches:List input:Map] [Any] [def next-id None for (branches size) [def idx i def br (branches idx get) if (input (br get "when") eval-pred) [def next-id (br get "next")] []] end next-id/v]]
 
 # --- eval-tree ---
 
-def eval-tree fn [[tree:Map input:Map] [Any] [def nodes quote (tree get "nodes") def current (nodes (tree get "root") find-node) def done false def result {ok: false, error: "max-depth-exceeded"} for 100 [def _i i if (done not) [if ((current get "kind") "leaf" eq) [def result (current get "result") def done true] [if ((current get "kind") "branch" eq) [(def next-id (input quote (current get "branches") find-branch-next) if (next-id None eq) [def result {ok: false, error: "no-branch-match"} def done true] [def current (nodes next-id find-node) if (current None eq) [def result {ok: false, error: "node-not-found"} def done true] []])] [def result {ok: false, error: "unknown-node-kind"} def done true]]] []] end result]]
+def eval-tree fn [[tree:Map input:Map] [Any] [def nodes quote (tree get "nodes") def current (nodes (tree get "root") find-node) def done false def result {ok: false, error: "max-depth-exceeded"} for 100 [def _i i if (done not) [if ((current get "kind") "leaf" eq) [def result (current get "result") def done true] [if ((current get "kind") "branch" eq) [(def next-id (input quote (current get "branches") find-branch-next) if (next-id None eq) [def result {ok: false, error: "no-branch-match"} def done true] [def current (nodes next-id find-node) if (current None eq) [def result {ok: false, error: "node-not-found"} def done true] []])] [def result {ok: false, error: "unknown-node-kind"} def done true]]] []] end result/v]]
 
 # --- decide ---
 
