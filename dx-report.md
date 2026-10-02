@@ -97,7 +97,9 @@ Test.check-prop "p" [do {a: [r.int 0 5], b: [r.int 0 5]}] [var [[pair] true]] 5 
 ```
 
 Rewritten as `[{a: (r.int 0 5), b: (r.int 0 5)}]` — a map literal evaluates
-its paren values directly, giving the same generated map.
+its paren values directly, giving the same generated map — and since
+2026-10-02 grouped, `[({a: (r.int 0 5), b: (r.int 0 5)})]`, so the generator
+also compiles as a runtime callback (see "Runtime callbacks" below).
 
 **3. A loop-body def of a computed `if` over the same name —
 `bench/decision_bench.aql`.**
@@ -194,6 +196,68 @@ compiles and answers wrongly without an error (it prints `41` and leaves
 `8`; the interpreter prints `42` and leaves `7`). `(out 41)` and a 0-arg
 `out/v apply` fail to compile.
 
+### Runtime callbacks: every property generator and property body compiles (2026-10-02)
+
+Every suite already compiled as a program, but 11 runtime callbacks — the
+`Test.check-prop` / `Test.prop` generator bodies and one property body —
+declined their compile stamp and ran on the interpreter
+(`boru -compile-report`: "did not compile codebody @ …"). They are boru's
+open callback refusals ([boru-lang/boru#528](https://github.com/boru-lang/boru/pull/528),
+`design/COMPILABLE-SUBSET.md` §5). Three natural rewrites, each commented in
+the suite, close all 11:
+
+- **A direct draw is grouped:** `[ r.int 0 40 ]` → `[ (r.int 0 40) ]`
+  (spec 90/105/125/139, test P1/P3/P4). The bare form declined with
+  "closure storedfn$body: unapplied fn-value in body residual (dynamic apply
+  not lowered)".
+- **A Map input is a grouped literal:**
+  `[ do { a: [r.int 0 9], b: [r.int 0 9] } ]` → `[ ({ a: (r.int 0 9), b: (r.int 0 9) }) ]`
+  (spec 62/74, which declined "finalize left the unit unstamped"), and test
+  P2's bare `[{a: (r.int 0 5), b: (r.int 0 5)}]` →
+  `[({a: (r.int 0 5), b: (r.int 0 5)})]` ("body result of unknown
+  provenance").
+- **Spec property 4's fold-loop `var` is renamed `rule` → `candidate`.** It
+  declined with "undef of the loop-carried def `rule` (Stage 3)". The trigger
+  is the name: a callback's `var` that reuses the name of a loop-carried
+  `def` inside a word the callback calls declines (decision.aql's
+  `eval-table-*` loops bind `rule`). A fresh name compiles. Minimal repro,
+  no library needed (row K):
+
+```boru
+import "boru:test"
+def count-big fn [[xs:List] [Integer] [def n 0 for (xs size) [def idx i def x (xs idx get) if (x 5 gt) [def n (n 1 add)] []] end n]]
+def specs [(Test.prop "p" [ (r.int 0 40) ] [ var [[v]
+  def xs [v 3 7]
+  ((count-big xs) eq (0 (xs each [ var [[x] (if (x 5 gt) [1] [0]) ] ]) [add end] fold))
+] ])]
+def _ (specs each [ var [[s] print ((s Test.run-property end)) 0 ] ])
+# -compile-report: did not compile codebody @ 3:44 — undef of the loop-carried def `x` (Stage 3)
+# rename the each-body `x` to `y`: the property body stamps. Both answer ok: true.
+```
+
+**Declines (`boru -compile-report`, "did not compile" lines):**
+`decision_prop_spec.aql` 7 → 0, `decision_prop_test.aql` 4 → 0; none left.
+No library function declines either, so every `Decision` suite now runs
+entirely compiled.
+
+**Value identity.** A scratch harness (outside the repo) ran the OLD and NEW
+generator bodies through `Test.check-prop` (spec bodies through
+`Test.prop` → `Test.run-property`, which calls the same driver, re-seeded with
+`set "seed"`), with a property that prints every generated value. It used each
+suite's own configuration (seed 1, 100 / 50 runs) and seeds 4, 250 and 99999
+at 25 runs each. Old and new outputs were byte-identical: 1,078 lines for
+the six spec generators and 520 for the four test generators. Property 4,
+instrumented to print `[v collected expected decided]`, gave 187 identical
+lines, all `true`. The suites' actual generator and property bodies, re-run
+under the same four seed settings, gave identical PropertyResult maps
+(24 + 16, all `ok: true` at full run counts). Each suite's own output is
+unchanged. No compiled answer differed from the interpreter's, and none of
+the already-known generator divergences (an inline nested generator losing
+`r`, a bare named-fn nested generator repeating its first draw, a `def`
+inside a generator) applies here: no generator in this library nests. The
+known NUR356 refusal (row C) recurred in probing: `(do {…})` inside a named
+generator fn fails to compile the same way.
+
 ### Open upstream defects found
 
 | # | Kind | Defect | Record | Effect here |
@@ -208,6 +272,7 @@ compiles and answers wrongly without an error (it prints `41` and leaves
 | H | runtime answer bug | **such a declined fn that breaks its declared return count raises `internal_error` compiled** (`dynamic frame replay … result count 2 differs from the declared 1`), where the interpreter raises the return contract's `type_error` | NUR366 ([#528](https://github.com/boru-lang/boru/pull/528)) | none: found while narrowing row G; every `Decision` fn leaves exactly its declared values |
 | I | runtime answer bug (**silent**) | **a local rebound in a `for` / `while` body and read bare in an `if` arm after the loop, holding a fn, comes back uncalled compiled**; the interpreter calls it. With an `each` / `for-each` body the compiled lane raises instead. One-file repro, `boru check` clean. | NUR367 ([#528](https://github.com/boru-lang/boru/pull/528)) | made the `unique` hit policy return a stored fn uncalled while `first` / `priority` called it; none now (the library fix) |
 | J | runtime answer bug (**silent**) + compile refusals | **calling a fn value obtained at run time and held in a local**: `print (41 out) 7` prints `41` and leaves `8` compiled (the interpreter prints `42` and leaves `7`; `boru check` clean); a 0-arg one bound `def r (out)` reads back `undefined_word`; most other spellings (`(out 41)`, a 0-arg `out/v apply`, `[(41 out) 7]`) fail to compile | NUR368 + `design/COMPILABLE-SUBSET.md` §5 ([#528](https://github.com/boru-lang/boru/pull/528)) | a caller applying a returned `then` / `result`; the docs name `41 out/v apply` and a `Function`-typed param, which agree |
+| K | compile refusal | **a runtime callback whose `var` reuses the name of a loop-carried `def` inside a word it calls declines its stamp** ("undef of the loop-carried def `rule` (Stage 3)") and runs on the interpreter; the answers agree, and a fresh name compiles | `design/COMPILABLE-SUBSET.md` §5 counts the decline ([#528](https://github.com/boru-lang/boru/pull/528)); the name-collision trigger is not recorded | spec property 4 declined; renamed `candidate` (see "Runtime callbacks" above) |
 
 Minimal standalone repro for F (two files):
 

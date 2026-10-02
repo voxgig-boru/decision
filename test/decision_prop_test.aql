@@ -10,6 +10,11 @@
 # PROP-BODY: code that runs with the generated input on the stack
 #           (also reachable as `args.0`); must return a Boolean.
 #
+# Generator member calls are grouped — `[(r.int 0 1000)]`, not
+# `[r.int 0 1000]`: the bare form declines its runtime compile stamp and runs
+# on the interpreter (boru COMPILABLE-SUBSET §5, boru-lang/boru#528); the
+# grouped form compiles and draws byte-identical values for the same seed.
+#
 # Every invariant below keeps the compared fields PRESENT in the input
 # map: an ordering op (lt/lte/gt/gte) on a MISSING field is None, not
 # Comparable, and would RAISE not_comparable rather than return false.
@@ -30,7 +35,7 @@ import "../decision.aql" end
 # any value), and the field is present, so this never raises.
 
 def _p1 (Test.check-prop "eval-cond-eq-reflexive"
-  [r.int 0 1000]                                      # gen: v in [0, 1000]
+  [(r.int 0 1000)]                                    # gen: v in [0, 1000]
   [
     var [[v]
       def cond {field:"v" op:"eq" value:v}
@@ -52,7 +57,9 @@ def _p2 (Test.check-prop "apply-op-eq-neq-complement"
   # or map literal whose evaluation may have an effect (NUR356)" — the
   # equivalent `do {a: [r.int 0 5], b: [r.int 0 5]}` declines to compile; a
   # map literal evaluates its paren values directly. Remove when fixed upstream.
-  [{a: (r.int 0 5), b: (r.int 0 5)}]                  # gen: small a,b so collisions occur
+  # The literal is itself grouped: a bare `[{a: …}]` generator declines its
+  # runtime compile stamp ("body result of unknown provenance").
+  [({a: (r.int 0 5), b: (r.int 0 5)})]                # gen: small a,b so collisions occur
   [
     var [[pair]
       def a (pair "a" get)
@@ -73,7 +80,7 @@ def _p2 (Test.check-prop "apply-op-eq-neq-complement"
 # never the second's. The generated value is >= both thresholds.
 
 def _p3 (Test.check-prop "table-first-wins"
-  [r.int 100 200]                                     # gen: n well above both rules
+  [(r.int 100 200)]                                   # gen: n well above both rules
   [
     var [[n]
       def table (Decision.make-table [
@@ -94,7 +101,7 @@ def _p3 (Test.check-prop "table-first-wins"
 # result is the generated value; eval-tree must return it unchanged.
 
 def _p4 (Test.check-prop "tree-single-leaf-identity"
-  [r.int 0 1000]                                      # gen: the leaf payload
+  [(r.int 0 1000)]                                    # gen: the leaf payload
   [
     var [[payload]
       def tree (Decision.make-tree only/q [

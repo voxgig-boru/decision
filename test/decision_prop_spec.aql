@@ -15,6 +15,16 @@
 #
 # `if` is written all-forward (`if cond [then] [else]`) throughout.
 #
+# Generator bodies are GROUPED — `[ (r.int 0 40) ]`, and a Map input as a
+# grouped literal `[ ({a: (r.int 0 9), b: (r.int 0 9)}) ]`. The bare
+# `[ r.int 0 40 ]` and the `do { a: [r.int 0 9] … }` spelling decline their
+# runtime compile stamp and run on the interpreter (boru COMPILABLE-SUBSET
+# §5, boru-lang/boru#528); the grouped forms compile and draw byte-identical
+# values for the same seed. Property 4 names its fold-loop rule `candidate`,
+# not `rule`: a callback's `var` that reuses the name of a loop-carried
+# `def` inside a word it calls (decision.aql's eval-table-* loops bind
+# `rule`) declines the stamp the same way ("undef of the loop-carried def").
+#
 # GOTCHA honoured here: an ordering op (lt/lte/gt/gte) on a MISSING field
 # raises `not_comparable` (a missing field is None, not Comparable). Every
 # generated input below keeps its compared fields PRESENT, so the ordering
@@ -59,7 +69,7 @@ def specs [
   #    value independently from the same small range so both the equal
   #    and not-equal cases occur; the field is always present.
   (Test.prop "eval-cond-eq-iff-equal"
-    [ do { stored: [r.int 0 5], actual: [r.int 0 5] } ]
+    [ ({ stored: (r.int 0 5), actual: (r.int 0 5) }) ]
     [ var [[g]
         def stored (g "stored" get)
         def actual (g "actual" get)
@@ -71,7 +81,7 @@ def specs [
   #    generated integers, eq is exactly the negation of neq. eq/neq are
   #    total (defined for every value), so no Comparable surface is needed.
   (Test.prop "apply-op-eq-neq-complementary"
-    [ do { a: [r.int 0 9], b: [r.int 0 9] } ]
+    [ ({ a: (r.int 0 9), b: (r.int 0 9) }) ]
     [ var [[g]
         def a (g "a" get)
         def b (g "b" get)
@@ -87,7 +97,7 @@ def specs [
   #    the generated `v`. (We compare the result's `hit` field rather than
   #    the whole `then` Map: scalar field equality is the robust check.)
   (Test.prop "first-policy-always-true-rule-wins"
-    [ r.int 0 100 ]
+    [ (r.int 0 100) ]
     [ var [[v]
         def tbl (Decision.make-table [
           (Decision.make-rule {field:"flag" op:"eq"  value:true} {hit:"first"})
@@ -102,7 +112,7 @@ def specs [
   #    folding eval-pred over the same rules. All rules compare `v`, which
   #    is always present, so the ordering ops never see a missing field.
   (Test.prop "collect-length-equals-match-count"
-    [ r.int 0 40 ]
+    [ (r.int 0 40) ]
     [ var [[v]
         def rules [
           (Decision.make-rule {field:"v" op:"gte" value:10} {t:"a"})
@@ -113,7 +123,7 @@ def specs [
         def input {v:v}
         def collected (Decision.eval-table tbl input)
         def expected (0 (rules each [
-          var [[rule] (if (Decision.eval-pred (rule get "when") input) [1] [0]) ]
+          var [[candidate] (if (Decision.eval-pred (candidate get "when") input) [1] [0]) ]
         ]) [add end] fold)
         ((collected size) eq expected)
     ] ])
@@ -122,7 +132,7 @@ def specs [
   #    ANY input — no branch is consulted, so the input is irrelevant and
   #    no field is compared.
   (Test.prop "single-leaf-tree-returns-result"
-    [ r.int 0 1000 ]
+    [ (r.int 0 1000) ]
     [ var [[v]
         def tree {kind:"tree" root:"only" nodes:[
           {id:"only" kind:"leaf" result:"the-result"}
@@ -136,7 +146,7 @@ def specs [
   #    The condition compares `v` with gte and `v` is always present, so
   #    both sides evaluate the same ordering op on Comparable operands.
   (Test.prop "all-of-one-cond-equals-cond"
-    [ r.int 0 40 ]
+    [ (r.int 0 40) ]
     [ var [[v]
         def c {field:"v" op:"gte" value:18}
         def input {v:v}
