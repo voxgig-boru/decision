@@ -31,6 +31,11 @@ RUNS="${RUNS:-3}"
 SRC="bench/decision_bench.aql"
 
 command -v "$BORU_BIN" >/dev/null 2>&1 || { echo "no boru binary ($BORU_BIN); set BORU"; exit 2; }
+# A build that still accepts a retired compile flag predates the single
+# execution path and may time the interpreter; this is a compiled-only bench.
+if "$BORU_BIN" --force-compile -e '1' >/dev/null 2>&1; then
+  echo "this boru ($BORU_BIN) still accepts --force-compile: it predates the single execution path; use a current boru"; exit 2
+fi
 
 # Materialise the benchmark at the requested iteration count. The copies live
 # NEXT TO the source: a relative import resolves against the importing file's

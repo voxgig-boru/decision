@@ -38,8 +38,10 @@ Make sure `$HOME/.local/bin` is on your `PATH`, then check it:
 boru -version
 ```
 
-Run any script in this repo by passing its path, from any directory. A
-relative import resolves against the **importing file's own directory**
+Run a script by passing its path. The script path itself is relative to
+your working directory, so the commands below run from the repo root (from
+elsewhere, pass a path that reaches the file). A
+relative import inside the script resolves against the **importing file's own directory**
 (for both `boru file` and `boru check file`), so the suites in `test/`
 write `import "../decision.aql"` and a script next to `decision.aql`
 writes `import "./decision.aql"`:

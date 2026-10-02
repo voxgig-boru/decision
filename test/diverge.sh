@@ -103,6 +103,9 @@ resolve_boru() {
       [ -n "$sha" ] || { red "could not resolve BORU_REF=$ref to a boru-lang/boru commit (network?); pass a commit SHA or set BORU=/path/to/boru" >&2; return 1; }
       ref="$sha" ;;
   esac
+  # An explicitly requested BORU_REF is a pin: if it cannot be built, fail rather
+  # than fall back to some other (cached or on-PATH) compiler revision.
+  if [ -n "$BORU_REF" ]; then build_ref "$ref"; return $?; fi
   if [ -n "$ref" ]; then build_ref "$ref" && return 0; fi
   # Offline fallback (couldn't reach main to resolve/build latest): prefer the
   # NEWEST cached build — the best proxy for "latest" — over a possibly stale
@@ -121,7 +124,8 @@ green "boru: $("$BORU_BIN" -version 2>/dev/null || echo "$BORU_BIN")"
 # A build that still ACCEPTS a retired flag predates the single execution path
 # (it can fall back to the interpreter); the gate's meaning assumes it cannot.
 if "$BORU_BIN" --force-compile -e '1' >/dev/null 2>&1; then
-  red "warning: this boru still accepts the retired --force-compile flag — it predates the single execution path (boru main 2026-09-19); RUN may be interpreted, not compiled" >&2
+  red "this boru still accepts the retired --force-compile flag — it predates the single execution path (boru main 2026-09-19), so a suite could pass on the interpreter; use a current boru (BORU=/path or BORU_REF=<sha>)" >&2
+  exit 2
 fi
 echo
 
