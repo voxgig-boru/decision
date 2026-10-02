@@ -176,8 +176,7 @@ def tags (Decision.with-policy "collect" (Decision.make-table [
 print (Decision.decide tags {age:25 score:80})   # => [{"tag": "adult"}, {"tag": "passing"}]
 ```
 
-A decision **tree** (branch → leaf), written as a Map literal and run with
-its own evaluator, `eval-tree`:
+A decision **tree** (branch → leaf), written as a Map literal:
 
 ```boru
 def tree {kind:"tree" root:"root" nodes:[
@@ -188,10 +187,10 @@ def tree {kind:"tree" root:"root" nodes:[
   {id:"minor" kind:"leaf" result:"too-young"}
   {id:"adult" kind:"leaf" result:"welcome"}
 ]}
-print (Decision.eval-tree tree {age:40})   # => welcome
+print (Decision.decide tree {age:40})   # => welcome
 ```
 
-The same tree built with the builders also runs through `decide`:
+The same tree built with the builders:
 
 ```boru
 def tree (Decision.make-tree root/q [
@@ -204,16 +203,6 @@ def tree (Decision.make-tree root/q [
 ])
 print (Decision.decide tree {age:40})   # => welcome
 ```
-
-> **`decide` + a Map-literal model trips a boru-check false positive (boru
-> main @ `64c5ab2`).** The pre-flight check analyses `decide`'s *other* arm
-> with the literal's concrete fields — a literal tree has no `rules`, a
-> literal table no `nodes` — and reports `no_signature` (e.g. `cannot call
-> eval-table-first … got (Map, None)`), which blocks the run although the
-> code is correct. With a literal model call its own evaluator
-> (`Decision.eval-table` / `Decision.eval-tree`), or build the model with the
-> builders (`make-table` / `make-tree`) and `decide` works. Minimal repro:
-> `dx-report.md` → "Migration to boru main @ 64c5ab2", open defect F.
 
 Test one condition or one operator directly:
 
@@ -234,7 +223,6 @@ print (Decision.apply-op 18 "gte" 25)                                  # => true
 | treat a miss as an exception | inspect `result.error` (a hit has none) | A *non-match* returns `{ok:false error:"…"}` (no throw); a hit is your bare `then`/leaf value, with no `ok`/`error` fields. |
 | an ordering op (`lt`/`gte`/…) on a maybe-missing field | guarantee the field is present, or compare it only with `eq`/`neq` | A missing field is `None`, not Comparable, so an ordering op **raises** `not_comparable`. (`eq`/`neq` return false for a missing field; the unary `is_*` ops can't gate this — they aren't usable in conditions.) |
 | `make-branch "root" …` | `make-branch root/q …` | The builder's `id` is an **Atom**; quote bare names with `/q`. |
-| `Decision.decide {kind:"tree" …literal…} input` | `Decision.eval-tree tree input` (or build with `make-tree` and `decide`) | boru main's pre-flight check analyses `decide`'s other arm with the literal's missing field and reports a false `no_signature` that blocks the run. |
 
 A note on `print` while debugging: `print` collects a forward argument, so a
 chain like `(a) print (b) print` can reorder (each `print` collects the next

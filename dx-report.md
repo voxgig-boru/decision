@@ -2,7 +2,8 @@
 
 > **Latest: [Migration to boru main @ 64c5ab2 (2026-10-01)](#migration-to-boru-main--64c5ab2-2026-10-01)**
 > — all five suites fully compile and pass on the single execution path;
-> three compile-defect workarounds, six open upstream defects with repros.
+> three compile-defect workarounds, one library-side workaround for a
+> `boru check` false positive, six open upstream defects with repros.
 
 **Date:** 2026-06-11
 **Builds under test:** `boru-lang/boru` @ `958c379b` (the `main` this library
@@ -33,8 +34,10 @@ commits past the `6185620` this library was last verified on. **Result: all
 five suites fully compile, run and print `all green` (smoke: clean exit), and
 `boru check` reports 0 errors / 0 warnings on every suite and on
 `decision.aql`.** Three compile defects needed a natural, semantics-preserving
-rewrite (each carries a comment naming the defect); every assertion and
-expected value is unchanged. Every code example in `AGENTS.md`, the skill,
+rewrite (each carries a comment naming the defect). A fourth rewrite works
+around a `boru check` false positive that blocked callers who pass Map-literal
+models (workaround 4, defect F). Every assertion and expected value is
+unchanged. Every code example in `AGENTS.md`, the skill,
 `README.md` and `docs/` was executed against this build and fixed where it no
 longer behaved as documented.
 
@@ -103,6 +106,29 @@ print (acc)
 Rewritten as `if ok [def acc (acc 1 add)] []` (the "dynamic-scope def
 family" in boru's `design/COMPILABLE-SUBSET.md`).
 
+**4. Map-literal models passed to the kind-dispatching words —
+`decision.aql` (`eval-pred`, `decide`).** Defect F below: the pre-flight check
+analyses an imported fn's untaken arm with the caller's Map literal and
+reports `no_signature` on the absent field, blocking the run. It hit
+`Decision.decide` with a literal tree or table, and also
+`Decision.eval-pred` with a bare condition literal (analysed through the
+group arm, `children` None) or a group literal (analysed through the
+condition arm, `field` None). The API reference documents all of these call
+shapes. Both words now pass the record to each arm through a `[Map]`-declared
+identity, `def as-map fn [[m:Map] [Map] [m]]`, so the checker sees a plain
+`Map`, not the literal's shape. Runtime behaviour is identical: the same
+results on every probe, and a malformed model, such as a table without
+`rules`, still raises `signature_error`. Each call below was blocked by the
+check before the change and now runs:
+
+```boru
+import "./decision.aql"
+print (Decision.eval-pred {field:"age" op:"gte" value:18} {age:25})                                    # => true
+print (Decision.eval-pred {kind:"group" op:"all" children:[{field:"age" op:"gte" value:18}]} {age:25}) # => true
+print (Decision.decide {kind:"tree" root:"r" nodes:[{id:"r" kind:"leaf" result:"welcome"}]} {age:40})  # => welcome
+print (Decision.decide {kind:"table" rules:[{when:{field:"age" op:"gte" value:18} then:"adult"}]} {age:25}) # => adult
+```
+
 ### Open upstream defects found
 
 | # | Kind | Defect | Record | Effect here |
@@ -112,7 +138,7 @@ family" in boru's `design/COMPILABLE-SUBSET.md`).
 | C | compile defect | effectful `do {k: [..] …}` literal in a stored fn body | NUR356 | worked around (2) |
 | D | compile defect | dynamic-scope def of an unpromoted computed value | COMPILABLE-SUBSET "dynamic-scope def family" | worked around (3) |
 | E | runtime answer bug | **`Assert.equal` coerces a mismatched type to the expected type's zero value**: `Assert.equal 0 "A"`, `Assert.equal "" 5`, `Assert.equal false [1]` all *pass*. `assertEqualHandler` calls `core.ValuesEqual`, which assumes both sides share a type and reads the second through the first's accessor (`AsInteger("A")` → 0). Any `Assert.equal` whose computed side is `0`/`""`/`false` passes against a value of another type. | unrecorded | masked the broken suite summaries until they were fixed; the unit suite was re-verified with a structural `deq` check (all 35 assertions hold) |
-| F | checker false positive | **`boru check` analyses an imported fn's untaken `if` arm with the caller's concrete Map literal** and reports `no_signature` on the absent (None) field, which blocks the run. `Decision.decide` with a Map-literal model hits it (a literal tree has no `rules`: `cannot call eval-table-first … got (Map, None)`; a literal table has no `nodes`: `cannot call find-node … got (None, None)`). The same program in one file checks clean. The excerpt printed is the importing file's while the position is the imported module's. | unrecorded | none in the suites (`decide` runs on builder-made models, or inside `Test.test` bodies); docs now run literal models through `eval-tree`/`eval-table` and note the issue |
+| F | checker false positive | **`boru check` analyses an imported fn's untaken `if` arm with the caller's concrete Map literal** and reports `no_signature` on the absent (None) field, which blocks the run. `Decision.decide` with a Map-literal model hits it (a literal tree has no `rules`: `cannot call eval-table-first … got (Map, None)`; a literal table has no `nodes`: `cannot call find-node … got (None, None)`), and so does `Decision.eval-pred` with a bare-condition literal (`cannot call eval-pred-all … got (Map, None)`) or a group literal (`cannot call convert … got (None, Word)` in `eval-cond`). The same program in one file checks clean. The excerpt printed is the importing file's while the position is the imported module's. | unrecorded | worked around in the library (4); the suites were never affected (they pass literals only inside `Test.test` bodies or through `Test.run-spec`, which the check does not specialise) |
 
 Minimal standalone repro for F (two files):
 
@@ -133,8 +159,8 @@ The same program in **one** file (`def cnt …`, `def f …`, `print (f
 boundary plus a concrete literal argument; `boru -no-check main.boru` also
 prints `0` (the run itself is correct — only the pre-flight check blocks it).
 
-The library-level repro — the exact case `AGENTS.md` warns about (a scratch
-dir holding a copy of `decision.aql`):
+The library-level repro, against `decision.aql` *before* workaround 4 (a
+scratch dir holding a copy of that version):
 
 ```boru
 import "./decision.aql"

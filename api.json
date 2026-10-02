@@ -16,8 +16,7 @@
     "import_resolution": "relative to the IMPORTING FILE's own directory (for both `boru file` and `boru check file`), not the working directory \u2014 a script in test/ writes `import \"../decision.aql\"`.",
     "external_deps": [],
     "requires": "needs a current boru main (verified at 64c5ab2, 2026-10-01) \u2014 uses surface/exposes, generics, refine Record, and fnsig. No boru:* deps.",
-    "execution": "boru main has one execution path: `boru file` runs a static pre-flight check, then compiles to bytecode and runs on the VM (no interpreter fallback; --compile/--force-compile/--no-compile are retired). All five suites compile and pass on 64c5ab2.",
-    "decide_literal_model_check_fp": "known boru-check false positive on boru main @ 64c5ab2: `Decision.decide` given a Map-LITERAL model is rejected by the pre-flight check (it analyses decide's other arm with the literal's missing rules/nodes field and reports no_signature), blocking the run although the code is correct. Build the model with make-table/make-tree, or call eval-table/eval-tree directly with a literal."
+    "execution": "boru main has one execution path: `boru file` runs a static pre-flight check, then compiles to bytecode and runs on the VM (no interpreter fallback; --compile/--force-compile/--no-compile are retired). All five suites compile and pass on 64c5ab2."
   },
   "modules": {
     "decision.aql": {
@@ -239,7 +238,7 @@
           "input:Map"
         ],
         "returns": "Map (result) | value | {ok:false error:...}",
-        "note": "dispatches on model.kind (\"table\" or \"tree\"). Unknown kind => {ok:false error:\"unknown-model-kind\"}."
+        "note": "dispatches on model.kind (\"table\" or \"tree\"); the model may be builder-made or a Map literal. Unknown kind => {ok:false error:\"unknown-model-kind\"}."
       }
     }
   },

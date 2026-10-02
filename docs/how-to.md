@@ -279,18 +279,14 @@ def tree {kind:"tree" root:"check-age" nodes:[
   {id:"approve" kind:"leaf" result:"approved"}
   {id:"review"  kind:"leaf" result:"needs-review"}
 ]}
-print (Decision.eval-tree tree {age:25 score:90}) end   # => approved
-print (Decision.eval-tree tree {age:25 score:60}) end   # => needs-review
-print (Decision.eval-tree tree {age:10 score:90}) end   # => rejected
+print (Decision.decide tree {age:25 score:90}) end   # => approved
+print (Decision.decide tree {age:25 score:60}) end   # => needs-review
+print (Decision.decide tree {age:10 score:90}) end   # => rejected
 ```
 
-A Map-literal model is run with its own evaluator (`eval-tree` here,
-`eval-table` for a table). `Decision.decide` works on builder-made models
-(above), but on boru main @ `64c5ab2` `decide` over a **Map-literal**
-model trips a false positive in the pre-flight check: it analyses
-`decide`'s other arm with the literal's concrete fields (a literal tree
-has no `rules`) and reports `no_signature … got (Map, None)`, which blocks
-the run. See [`dx-report.md`](../dx-report.md).
+`decide` takes a Map-literal model and a builder-made one alike; its own
+evaluator (`Decision.eval-tree` here, `Decision.eval-table` for a table)
+gives the same answer.
 
 Note that ids inside Map-literal branches/leaves are Strings
 (`id:"reject"`, `next:"reject"`), while the builders take Atoms

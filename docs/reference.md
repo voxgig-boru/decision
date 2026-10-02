@@ -347,6 +347,7 @@ condition).
 ```boru
 def p (Decision.all-of [{field:"age" op:"gte" value:18} {field:"score" op:"gt" value:50}])
 print (Decision.eval-pred p {age:25 score:80})   # => true
+print (Decision.eval-pred {field:"age" op:"gte" value:18} {age:25})   # => true  (a bare condition)
 ```
 
 ### `Decision.eval-table`
@@ -414,14 +415,14 @@ def model (Decision.make-table [
 print (Decision.decide model {x:5})   # => {"sign": "positive"}
 ```
 
-> **Known boru-check false positive (boru main @ `64c5ab2`).** Passed a
-> **Map-literal** model (`def model {kind:"table" …}`), `decide` is
-> rejected by the pre-flight check: the checker analyses `decide`'s other
-> arm with the literal's concrete fields — a literal table has no `nodes`
-> — and reports `no_signature` (`cannot call find-node … got (None,
-> None)`), which blocks the run although the code is correct. Build the
-> model with the builders (as above), or call the kind's own evaluator
-> (`Decision.eval-table` / `Decision.eval-tree`), which accept literals.
+The model may equally be a Map literal — the evaluators only read fields:
+
+```boru
+def model {kind:"table" hit-policy:"first" rules:[
+  {when:{field:"x" op:"gt" value:0} then:{sign:"positive"}}
+]}
+print (Decision.decide model {x:5})   # => {"sign": "positive"}
+```
 
 ---
 
