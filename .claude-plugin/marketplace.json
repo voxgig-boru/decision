@@ -1,12 +1,12 @@
 {
   "name": "voxgig-boru",
   "owner": { "name": "voxgig-boru" },
-  "description": "Plugins for the voxgig AQL ecosystem.",
+  "description": "Plugins for the voxgig boru ecosystem.",
   "plugins": [
     {
       "name": "decision-aql",
       "source": "./plugins/decision-aql",
-      "description": "Agent guidance for using the decision-logic library (decision tables and trees) from AQL.",
+      "description": "Agent guidance for using the decision-logic library (decision tables and trees) from boru.",
       "version": "0.1.0",
       "license": "MIT"
     }

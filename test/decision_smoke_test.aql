@@ -4,7 +4,7 @@
 # below just shows each word doing its job.
 #
 # Run:
-#   aql test/decision_smoke_test.aql
+#   boru test/decision_smoke_test.aql
 #
 # Style: every narrated line uses the forward `print (value)` form — the
 # verb first, its one argument grouped in parens immediately after. Because
@@ -16,9 +16,37 @@
 # parens around each call are still required — `print Decision.foo a b`
 # would print the *word* `foo` and strand `a b`; a `;` does not fix that.)
 
-import "./decision.aql"
+import "../decision.aql"
 
 print "--- decision smoke demo ---"
+
+# --- Map-literal models ---------------------------------------------
+# The evaluators only read fields, so a model or predicate written as a
+# plain Map literal goes through the same words as a builder-made one.
+# This section comes FIRST on purpose: boru check analyses an imported word
+# with the argument shapes of its first call, so these literal calls are
+# what exercise decision.aql's `as-map` workaround. Without it the
+# pre-flight check rejects them with a false `no_signature` and the run is
+# blocked (dx-report.md, defect F).
+def literal-tree {kind:"tree" root:"root" nodes:[
+  {id:"root" kind:"branch" branches:[
+    {when:{field:"age" op:"lt"  value:18} next:"minor"}
+    {when:{field:"age" op:"gte" value:18} next:"adult"}
+  ]}
+  {id:"minor" kind:"leaf" result:"too-young"}
+  {id:"adult" kind:"leaf" result:"welcome"}
+]}
+print "decide literal tree:  "
+print (Decision.decide literal-tree {age:12}) # => too-young
+def literal-table {kind:"table" hit-policy:"first" rules:[
+  {when:{field:"age" op:"gte" value:18} then:{category:"adult"}}
+]}
+print "decide literal table: "
+print (Decision.decide literal-table {age:30}) # => {"category": "adult"}
+print "eval-pred literal cond:"
+print (Decision.eval-pred {field:"age" op:"gte" value:18} {age:25})   # => true
+print "eval-pred literal group:"
+print (Decision.eval-pred {kind:"group" op:"any" children:[{field:"age" op:"lt" value:13} {field:"score" op:"gte" value:90}]} {age:25 score:95})   # => true
 
 # --- primitive operators (apply-op) --------------------------------
 # apply-op takes rhs op lhs and computes `lhs op rhs`.

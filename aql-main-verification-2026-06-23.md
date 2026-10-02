@@ -1,5 +1,14 @@
 # boru `main` mode-verification report
 
+> **Historical record (superseded 2026-10-01).** This document predates
+> boru main's single execution path (2026-09-19): `--compile`,
+> `--force-compile` and `--no-compile` are now retired (usage errors), every
+> program is compiled to bytecode and run on the VM, and `/r` is spelled
+> `/v`. As of boru main @ `64c5ab2` all five suites compile and pass — see
+> [dx-report.md](dx-report.md#migration-to-boru-main--64c5ab2-2026-10-01)
+> and `test/diverge.sh`. Kept unedited below as the record of what was
+> observed at the time.
+
 **Date:** 2026-06-24 (latest re-test)
 **Task:** track latest `boru` `main` and verify that **interpreting**, **checking**,
 and **compiling** work against the `Decision` suites; review the upstream design

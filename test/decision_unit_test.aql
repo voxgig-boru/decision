@@ -5,11 +5,11 @@
 # (`Test.spec` / `Test.case` / `Test.run-spec`).
 #
 # Run:
-#   aql test/decision_unit_test.aql
+#   boru test/decision_unit_test.aql
 
 
 import "boru:test" end
-import "./decision.aql" end
+import "../decision.aql" end
 
 
 # --- apply-op: the primitive compare (lhs op rhs) ------------------
@@ -221,9 +221,46 @@ import "./decision.aql" end
 ] "decide-unknown-model-kind" Test.test end
 
 
+# --- a rule's `then` / a leaf's `result` is returned as data -------
+#
+# A stored `then` / leaf `result` is the decision's RESULT VALUE: every
+# path returns it exactly as stored. A function stored there comes back as
+# a Function value (read it with `/v`); decision never calls it. Before,
+# the `first` and `priority` policies and the tree evaluator CALLED it
+# while `unique` and `collect` returned it, and a function handed to
+# `make-leaf` stopped the whole program compiling. If any path called the
+# function, its typeof here would be Integer (42), not Function.
+
+[
+  def fr ([] => [42])
+  def w {field:"age" op:"gte" value:18}
+  def o-first (Decision.decide {kind:"table" hit-policy:"first" rules:[{when:w then:fr/v}]} {age:25})
+  true ((o-first/v typeof) Function eq) Assert.equal end
+  def o-unique (Decision.decide {kind:"table" hit-policy:"unique" rules:[{when:w then:fr/v}]} {age:25})
+  true ((o-unique/v typeof) Function eq) Assert.equal end
+  def o-priority (Decision.decide {kind:"table" hit-policy:"priority" rules:[{when:w then:fr/v priority:1}]} {age:25})
+  true ((o-priority/v typeof) Function eq) Assert.equal end
+  def o-collect (Decision.decide {kind:"table" hit-policy:"collect" rules:[{when:w then:fr/v}]} {age:25})
+  def c0 (o-collect get 0)
+  true ((c0/v typeof) Function eq) Assert.equal end
+  def o-tree (Decision.decide {kind:"tree" root:"r" nodes:[{id:"r" kind:"branch" branches:[{when:w next:"l"}]} {id:"l" kind:"leaf" result:fr/v}]} {age:25})
+  true ((o-tree/v typeof) Function eq) Assert.equal end
+  def o-built (Decision.decide (Decision.make-tree r/q [(Decision.make-branch r/q [{when:w next:"l"}]) (Decision.make-leaf l/q fr/v)]) {age:25})
+  true ((o-built/v typeof) Function eq) Assert.equal end
+] "stored-fn-results-are-data" Test.test end
+
+
 # --- summary -------------------------------------------------------
 
-"---" print
-"fail count: " print Test.fail-count end print
-0 Test.fail-count end Assert.equal end
-"all green" print
+# One forward `print (value)` per statement, so output stays in source order
+# and nothing reaches across a statement boundary. (The old stack-form
+# summary `"---" print "fail count: " print Test.fail-count end print …`
+# let each `print` collect the NEXT statement's value; on boru main that left
+# `"---"` stranded and the final `Assert.equal` compared fail-count against
+# it — passing only because Assert.equal coerces a mismatched type to the
+# expected type's zero value. See dx-report.md, "Migration to boru main".)
+print "---"
+print "fail count: "
+print (Test.fail-count)
+Assert.equal 0 (Test.fail-count)
+print "all green"

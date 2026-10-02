@@ -2,9 +2,9 @@
 # evaluate them many times, exercising eval-pred, eval-table (priority policy →
 # scans every rule), eval-tree (multi-level walk) and decide. A single Integer
 # checksum keeps the whole body live and makes the compiled and interpreted runs
-# trivially differential-checkable (identical output).
+# trivially checkable (a fixed expected value).
 
-import "./decision.aql"
+import "../decision.aql"
 
 def table (Decision.with-policy "priority" (Decision.make-table [
   (Decision.make-rule {field:"age" op:"lt"  value:18} {tier:1})
@@ -38,6 +38,9 @@ for 3000 [
   def _t (Decision.decide table input)
   def _leaf (Decision.decide tree input)
   def ok (Decision.eval-pred pred input)
-  def acc (if ok [acc 1 add] [acc])
+  # works around boru compile defect: "dynamic-scope def `acc` of unpromoted
+  # computed value" — `def acc (if ok [acc 1 add] [acc])` declines to compile;
+  # rebinding inside the arm is equivalent. Remove when fixed upstream.
+  if ok [def acc (acc 1 add)] []
 ] end
 print (acc)

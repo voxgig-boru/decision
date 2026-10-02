@@ -37,14 +37,16 @@
 # (lt/lte/gt/gte) require. The scalar builtins expose it; a user type
 # joins by exposing Comparable itself. eq/neq work for any value.
 #
-# Calling convention: the receiver/data comes first, then the verb. The
-# evaluators take the MODEL first and the input second — written forward
-# as `Decision.eval-table table input` / `Decision.decide model input`
-# (in stack form the model sits on top of the input). Wrap a call in
-# parens, or end it, when a bare value would otherwise follow the verb.
+# Calling convention: forward, the verb first, with the RECEIVER (the
+# model/input) LAST — `Decision.eval-table table input` /
+# `Decision.decide model input`. Piping the input in from the left also
+# binds (`input Decision.decide model`); putting the receiver first does
+# not. Wrap a call in parens when its result is used as a value.
 #
-# Imported via `import "./decision.aql"`. Needs aql ≥ 61856202 (uses
-# surface / exposes / generics / refine Record / fnsig). No aql:* deps.
+# Imported via `import "./decision.aql"` — a relative import resolves
+# against the IMPORTING file's own directory (a suite under test/ writes
+# `import "../decision.aql"`). Verified against boru main @ 64c5ab2 (uses
+# surface / exposes / generics / refine Record / fnsig). No boru:* deps.
 
 
 # ============================================================
@@ -109,7 +111,7 @@ def make-branch fn [[id:Atom branches:List] [Map] [
 ]]
 
 def make-leaf fn [[id:Atom result:Any] [Map] [
-  make LeafNode {id:id kind:"leaf" result:result}
+  make LeafNode {id:id kind:"leaf" result:result/v}
 ]]
 
 def make-tree fn [[root:Atom nodes:List] [Map] [
@@ -151,18 +153,42 @@ def eval-pred-not fn [[children:Map input:Map] [Boolean] [input children eval-co
 def eval-pred-not fn [[children:List input:Map] [Boolean] [input (children 0 get) eval-pred not]]
 
 # --- eval-pred ---
+#
+# `as-map` is the identity on a Map. The kind-dispatching words (eval-pred
+# here, decide below) pass the record to each arm through it. On boru main
+# @ 64c5ab2, `boru check` (and so the pre-flight check of `boru file`)
+# analyses an IMPORTED fn's untaken arm with the caller's concrete
+# Map-literal argument. It reads the absent field as None and reports
+# `no_signature`, which blocks a correct run. Two examples: a bare
+# condition literal given to `Decision.eval-pred` is analysed through the
+# group arm (`children` is None), and a literal tree given to
+# `Decision.decide` is analysed through the table arm (`rules` is None).
+# Declared `[Map]`, `as-map` hands each arm a plain Map instead of the
+# literal's shape. Works around that boru check false positive (dx-report.md,
+# open defect F) — remove when fixed upstream.
 
-def eval-pred fn [[pred:Map input:Map] [Boolean] [if ((pred get "kind") "group" eq) [(def group-op (pred get "op") def children quote (pred get "children") if (group-op "all" eq) [input children eval-pred-all] [if (group-op "any" eq) [input children eval-pred-any] [if (group-op "not" eq) [input children eval-pred-not] [false]]])] [input pred eval-cond]]]
+def as-map fn [[m:Map] [Map] [m]]
+
+def eval-pred fn [[pred:Map input:Map] [Boolean] [if ((pred get "kind") "group" eq) [(def group-op (pred get "op") def children quote ((pred as-map) get "children") if (group-op "all" eq) [input children eval-pred-all] [if (group-op "any" eq) [input children eval-pred-any] [if (group-op "not" eq) [input children eval-pred-not] [false]]])] [input (pred as-map) eval-cond]]]
 
 # --- eval-table helpers ---
+#
+# The miss results below are plain Map literals. They were written
+# `(do {ok: false, error: "…"})`; on boru main @ 64c5ab2 a fn-local def
+# followed by `def x (do {map})` breaks later loop-body reads of that local
+# when compiled — eval-tree declined to compile ("a gradual read in a nested
+# body has no seated guard … (NUR361)") and the same shape elsewhere raised
+# `undefined word` at run time. A literal of literal values needs no `do`,
+# so dropping it is equivalent. Works around that boru compile defect —
+# the `do` may come back once it is fixed upstream (see dx-report.md).
 
-def eval-table-first fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def found false for (rules size) [def idx i def rule (rules idx get) if (found not) [if (input (rule get "when") eval-pred) [def result (rule get "then") def found true] []] []] end result]]
+def eval-table-first fn [[rules:List input:Map] [Any] [def result {ok: false, error: "no-match"} def found false for (rules size) [def idx i def rule (rules idx get) if (found not) [if (input (rule get "when") eval-pred) [def result (rule get "then") def found true] []] []] end result/v]]
 
-def eval-table-unique fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def match-count 0 for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def result (rule get "then") def match-count (match-count 1 add)] []] end if (match-count 1 eq) [result] [if (match-count 0 eq) [do {ok: false, error: "no-match"}] [do {ok: false, error: "multiple-matches"}]]]]
+def eval-table-unique fn [[rules:List input:Map] [Any] [def result {ok: false, error: "no-match"} def match-count 0 for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def result (rule get "then") def match-count (match-count 1 add)] []] end if (match-count 1 eq) [result/v] [if (match-count 0 eq) [{ok: false, error: "no-match"}] [{ok: false, error: "multiple-matches"}]]]]
 
 def eval-table-collect fn [[rules:List input:Map] [Any] [def results quote [] for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def results (quote (results (rule get "then") push))] []] end results]]
 
-def eval-table-priority fn [[rules:List input:Map] [Any] [def best (do {ok: false, error: "no-match"}) def best-pri 0 def found false for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def pri (if ((rule get "priority") None neq) [(rule get "priority")] [0]) if (found not) [def best (rule get "then") def best-pri pri def found true] [if (pri best-pri gt) [def best (rule get "then") def best-pri pri] []]] []] end best]]
+def eval-table-priority fn [[rules:List input:Map] [Any] [def best {ok: false, error: "no-match"} def best-pri 0 def found false for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def pri (if ((rule get "priority") None neq) [(rule get "priority")] [0]) if (found not) [def best (rule get "then") def best-pri pri def found true] [if (pri best-pri gt) [def best (rule get "then") def best-pri pri] []]] []] end best/v]]
 
 # --- eval-table ---
 
@@ -170,17 +196,17 @@ def eval-table fn [[table:Map input:Map] [Any] [def rules quote (table get "rule
 
 # --- eval-tree helpers ---
 
-def find-node fn [[id:Any nodes:List] [Any] [def found None for (nodes size) [def idx i def nd (nodes idx get) if ((nd get "id" convert String) (id convert String) eq) [def found nd] []] end found]]
+def find-node fn [[id:Any nodes:List] [Any] [def found None for (nodes size) [def idx i def nd (nodes idx get) if ((nd get "id" convert String) (id convert String) eq) [def found nd] []] end found/v]]
 
-def find-branch-next fn [[branches:List input:Map] [Any] [def next-id None for (branches size) [def idx i def br (branches idx get) if (input (br get "when") eval-pred) [def next-id (br get "next")] []] end next-id]]
+def find-branch-next fn [[branches:List input:Map] [Any] [def next-id None for (branches size) [def idx i def br (branches idx get) if (input (br get "when") eval-pred) [def next-id (br get "next")] []] end next-id/v]]
 
 # --- eval-tree ---
 
-def eval-tree fn [[tree:Map input:Map] [Any] [def nodes quote (tree get "nodes") def current (nodes (tree get "root") find-node) def done false def result (do {ok: false, error: "max-depth-exceeded"}) for 100 [def _i i if (done not) [if ((current get "kind") "leaf" eq) [def result (current get "result") def done true] [if ((current get "kind") "branch" eq) [(def next-id (input quote (current get "branches") find-branch-next) if (next-id None eq) [def result (do {ok: false, error: "no-branch-match"}) def done true] [def current (nodes next-id find-node) if (current None eq) [def result (do {ok: false, error: "node-not-found"}) def done true] []])] [def result (do {ok: false, error: "unknown-node-kind"}) def done true]]] []] end result]]
+def eval-tree fn [[tree:Map input:Map] [Any] [def nodes quote (tree get "nodes") def current (nodes (tree get "root") find-node) def done false def result {ok: false, error: "max-depth-exceeded"} for 100 [def _i i if (done not) [if ((current get "kind") "leaf" eq) [def result (current get "result") def done true] [if ((current get "kind") "branch" eq) [(def next-id (input quote (current get "branches") find-branch-next) if (next-id None eq) [def result {ok: false, error: "no-branch-match"} def done true] [def current (nodes next-id find-node) if (current None eq) [def result {ok: false, error: "node-not-found"} def done true] []])] [def result {ok: false, error: "unknown-node-kind"} def done true]]] []] end result/v]]
 
 # --- decide ---
 
-def decide fn [[model:Map input:Map] [Any] [if ((model get "kind") "table" eq) [input model eval-table] [if ((model get "kind") "tree" eq) [input model eval-tree] [do {ok: false, error: "unknown-model-kind"}]]]]
+def decide fn [[model:Map input:Map] [Any] [if ((model get "kind") "table" eq) [input (model as-map) eval-table] [if ((model get "kind") "tree" eq) [input (model as-map) eval-tree] [{ok: false, error: "unknown-model-kind"}]]]]
 
 # ============================================================
 # Exports
@@ -195,20 +221,20 @@ export "Decision" {
   BranchNode:  BranchNode
   LeafNode:    LeafNode
   DTree:       DTree
-  cond:        cond/r
-  all-of:      all-of/r
-  any-of:      any-of/r
-  not-of:      not-of/r
-  make-rule:   make-rule/r
-  make-table:  make-table/r
-  with-policy: with-policy/r
-  make-branch: make-branch/r
-  make-leaf:   make-leaf/r
-  make-tree:   make-tree/r
-  apply-op:    apply-op/r
-  eval-cond:   eval-cond/r
-  eval-pred:   eval-pred/r
-  eval-table:  eval-table/r
-  eval-tree:   eval-tree/r
-  decide:      decide/r
+  cond:        cond/v
+  all-of:      all-of/v
+  any-of:      any-of/v
+  not-of:      not-of/v
+  make-rule:   make-rule/v
+  make-table:  make-table/v
+  with-policy: with-policy/v
+  make-branch: make-branch/v
+  make-leaf:   make-leaf/v
+  make-tree:   make-tree/v
+  apply-op:    apply-op/v
+  eval-cond:   eval-cond/v
+  eval-pred:   eval-pred/v
+  eval-table:  eval-table/v
+  eval-tree:   eval-tree/v
+  decide:      decide/v
 }

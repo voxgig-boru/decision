@@ -15,9 +15,9 @@ def table (Decision.make-table [
   (Decision.make-rule {field:"age" op:"gte" value:65} {category:"senior"})
 ])
 
-(Decision.decide table {age:12}) print end   # => {category: minor}
-(Decision.decide table {age:70}) print end   # => {category: senior}
-(Decision.decide table {age:30}) print end   # => {ok:false error:no-match}
+print (Decision.decide table {age:12})   # => {"category": "minor"}
+print (Decision.decide table {age:70})   # => {"category": "senior"}
+print (Decision.decide table {age:30})   # => {"ok": false, "error": "no-match"}
 ```
 
 > **Calling convention.** boru is forward: the verb first, arguments
@@ -118,9 +118,10 @@ test/decision_unit_spec.aql    example-based unit tests — declarative spec for
 test/decision_prop_test.aql    property-based tests — direct (Test.check-prop)
 test/decision_prop_spec.aql    property-based tests — declarative spec format
 test/decision_smoke_test.aql   end-to-end smoke run over every public word
-test/diverge.sh                multi-mode test gate (tracks latest boru; runs interpreter, check, bytecode)
+test/diverge.sh                test gate (tracks latest boru main; every suite compiles+runs, 0 check errors)
+bench/                         performance baseline (bench.sh, decision_bench.aql, BASELINE.md)
 docs/                          Diátaxis documentation (above)
-dx-report.md                   developer-experience notes against boru @ 61856202, re-reviewed at 5aed3834
+dx-report.md                   developer-experience notes; migration to boru main @ 64c5ab2 and open upstream defects
 ```
 
 Test files follow a consistent naming convention: `_test.aql` for direct
@@ -129,9 +130,9 @@ property).
 
 ## Running it
 
-Build the `boru` interpreter at the pinned commit `61856202`, then run any
-script or test — see
-[How-to → Install and run](docs/how-to.md#install-and-run-aql):
+Build `boru` from source at `main` (this library tracks `main`; last
+verified at `64c5ab2`, 2026-10-01), then run any script or test — see
+[How-to → Install and run](docs/how-to.md#install-and-run-boru):
 
 ```bash
 boru test/decision_unit_test.aql   # unit tests — direct
@@ -145,17 +146,17 @@ Each assertion-bearing suite ends by asserting `Test.fail-count` is `0`
 and printing `all green`; the smoke run passes if it completes without an
 error. A GitHub Actions workflow
 ([`.github/workflows/test.yml`](.github/workflows/test.yml)) builds boru
-from the pinned commit (`BORU_REF`) and runs every suite on each push and
-pull request.
+at the current `main` HEAD and runs every suite on each push and pull
+request.
 
-boru can run a program three ways — the tree-walking interpreter, the
-static checker (`boru check`), and an experimental bytecode compiler.
-`bash test/diverge.sh` tracks the **latest `boru` from `main`** and runs
-every suite under all three modes. Its hard guarantees are that every
-suite interprets and checks (zero errors) clean, and that any suite the
-compiler accepts matches the interpreter (no divergence); compile coverage
-is reported as current status and grows as `boru` does. See
-[How-to → Run the suites under every execution mode](docs/how-to.md#run-the-suites-under-every-execution-mode).
+boru main has **one execution path**: `boru file` runs the static checker
+as a pre-flight, then compiles the program to bytecode and runs it on the
+VM — there is no interpreter fallback, so a suite that runs is a suite
+that fully compiles. `bash test/diverge.sh` tracks the **latest `boru`
+from `main`**; its hard guarantees are that every suite compiles, runs and
+passes, and that `boru check` reports zero errors on every suite and on
+`decision.aql`. All five suites are fully compiled on `64c5ab2`. See
+[How-to → Run the test gate](docs/how-to.md#run-the-test-gate).
 
 ## License
 

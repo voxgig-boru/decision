@@ -5,7 +5,7 @@ script that classifies people by age with a **decision table**, grown it
 into a compound rule, collected every match, and finally walked a
 **decision tree**. You need no prior knowledge of decision logic — just a
 working `boru` binary (see
-[How-to → Install and run](how-to.md#install-and-run-aql)) and this
+[How-to → Install and run](how-to.md#install-and-run-boru)) and this
 repository checked out.
 
 > **AI agents:** for the calling convention and a verified cheat-sheet,
@@ -106,7 +106,7 @@ print (Decision.decide strict {age:40}) end
 
 ```console
 $ boru classify.aql
-{"error": "no-match", "ok": false}
+{"ok": false, "error": "no-match"}
 ```
 
 No rule matched age 40, so you get `{ok:false error:"no-match"}` rather
@@ -143,7 +143,7 @@ print (Decision.decide vip-table {age:25 score:50}) end
 ```console
 $ boru classify.aql
 {"tier": "premium"}
-{"error": "no-match", "ok": false}
+{"ok": false, "error": "no-match"}
 ```
 
 The first input clears both bars and earns `premium`; the second has a low

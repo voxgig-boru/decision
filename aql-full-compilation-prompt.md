@@ -1,5 +1,14 @@
 # Prompt: make the client test suites fully `--force-compile` on boru `main`
 
+> **Historical record (superseded 2026-10-01).** This document predates
+> boru main's single execution path (2026-09-19): `--compile`,
+> `--force-compile` and `--no-compile` are now retired (usage errors), every
+> program is compiled to bytecode and run on the VM, and `/r` is spelled
+> `/v`. As of boru main @ `64c5ab2` all five suites compile and pass — see
+> [dx-report.md](dx-report.md#migration-to-boru-main--64c5ab2-2026-10-01)
+> and `test/diverge.sh`. Kept unedited below as the record of what was
+> observed at the time.
+
 You are working in **`boru-lang/boru`**. The goal below is concrete and verifiable.
 Everything here is grounded in the current `main` design docs and in a live
 verification of the `voxgig-boru/decision` library against `main @ 407fedad`.
