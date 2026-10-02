@@ -92,6 +92,17 @@ resolve_boru() {
   fi
   local ref="$BORU_REF"
   [ -z "$ref" ] && ref="$(latest_main_sha)"
+  # A symbolic BORU_REF (main, a tag, feature/x) is mutable and may contain '/':
+  # resolve it to the commit it names, so build_ref's cache key is immutable.
+  case "$ref" in
+    *[!0-9a-f]*)
+      local sha
+      sha="$(git ls-remote https://github.com/boru-lang/boru.git "$ref" 2>/dev/null | awk -v r="$ref" '
+        $2==r || $2=="refs/heads/"r {h=$1} $2=="refs/tags/"r {t=$1} $2=="refs/tags/"r"^{}" {p=$1}
+        END {print (h!="" ? h : (p!="" ? p : t))}')"
+      [ -n "$sha" ] || { red "could not resolve BORU_REF=$ref to a boru-lang/boru commit (network?); pass a commit SHA or set BORU=/path/to/boru" >&2; return 1; }
+      ref="$sha" ;;
+  esac
   if [ -n "$ref" ]; then build_ref "$ref" && return 0; fi
   # Offline fallback (couldn't reach main to resolve/build latest): prefer the
   # NEWEST cached build — the best proxy for "latest" — over a possibly stale
