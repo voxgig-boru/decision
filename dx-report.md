@@ -239,7 +239,10 @@ def _ (specs each [ var [[s] print ((s Test.run-property end)) 0 ] ])
 **Declines (`boru -compile-report`, "did not compile" lines):**
 `decision_prop_spec.aql` 7 → 0, `decision_prop_test.aql` 4 → 0; none left.
 No library function declines either, so every `Decision` suite now runs
-entirely compiled.
+entirely compiled. An instrumented build of the same boru commit, which reports every
+run-time interpreter entry from compiled code (a native word running a code
+body on a pooled interpreter, a fallback island), finds none in any of the
+five suites (2026-10-02).
 
 **Value identity.** A scratch harness (outside the repo) ran the OLD and NEW
 generator bodies through `Test.check-prop` (spec bodies through
@@ -280,7 +283,7 @@ library nests. The known NUR356 refusal (row C) recurred in probing:
 | H | runtime answer bug | **such a declined fn that breaks its declared return count raises `internal_error` compiled** (`dynamic frame replay … result count 2 differs from the declared 1`), where the interpreter raises the return contract's `type_error` | NUR366 ([#528](https://github.com/boru-lang/boru/pull/528)) | none: found while narrowing row G; every `Decision` fn leaves exactly its declared values |
 | I | runtime answer bug (**silent**) | **a local rebound in a `for` / `while` body and read bare in an `if` arm after the loop, holding a fn, comes back uncalled compiled**; the interpreter calls it. With an `each` / `for-each` body the compiled lane raises instead. One-file repro, `boru check` clean. | NUR367 ([#528](https://github.com/boru-lang/boru/pull/528)) | made the `unique` hit policy return a stored fn uncalled while `first` / `priority` called it; none now (the library fix) |
 | J | runtime answer bug (**silent**) + compile refusals | **calling a fn value obtained at run time and held in a local**: `print (41 out) 7` prints `41` and leaves `8` compiled (the interpreter prints `42` and leaves `7`; `boru check` clean); a 0-arg one bound `def r (out)` reads back `undefined_word`; most other spellings (`(out 41)`, a 0-arg `out/v apply`, `[(41 out) 7]`) fail to compile | NUR368 + `design/COMPILABLE-SUBSET.md` §5 ([#528](https://github.com/boru-lang/boru/pull/528)) | a caller applying a returned `then` / `result`; the docs name `41 out/v apply` and a `Function`-typed param, which agree |
-| K | compile refusal | **a runtime callback whose `var` reuses the name of a loop-carried `def` inside a word it calls declines its stamp** ("undef of the loop-carried def `rule` (Stage 3)") and runs on the interpreter; the answers agree, and a fresh name compiles | `design/COMPILABLE-SUBSET.md` §5 counts the decline ([#528](https://github.com/boru-lang/boru/pull/528)); the name-collision trigger is not recorded | spec property 4 declined; renamed `candidate` (see "Runtime callbacks" above) |
+| K | compile refusal | **a runtime callback whose `var` reuses the name of a loop-carried `def` inside a word it calls declines its stamp** ("undef of the loop-carried def `rule` (Stage 3)") and runs on the interpreter; the answers agree, and a fresh name compiles | `design/COMPILABLE-SUBSET.md` §5, its own bullet with this repro ([#528](https://github.com/boru-lang/boru/pull/528)) | spec property 4 declined; renamed `candidate` (see "Runtime callbacks" above) |
 
 Minimal standalone repro for F (two files):
 
